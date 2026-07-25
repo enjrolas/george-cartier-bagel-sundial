@@ -34,6 +34,7 @@
       </div>
     </div>
     <div class="topbar-right">
+      <button class="info-btn" id="infoBtn" type="button" aria-label="about">i</button>
       <a class="ar-link" href="/ar/">◎ AR</a>
       <a class="ar-link" href="/anywhere/">🌍 george anywhere</a>
       <a class="ar-link" href="/watch/">⌚ watch</a>
@@ -63,10 +64,24 @@
       <label class="ctl ctl-slider">
         <span class="ctl-title">Time <em id="timeVal">—</em> <em id="tzLabel">(local)</em></span>
         <input type="range" id="timeSlider" min="0" max="1439" step="1" value="780" />
-        <span class="ctl-hint">scrub through the day to sweep the shadow</span>
       </label>
     </div>
   </section>
+
+  <div id="infoModal" class="modal" hidden>
+    <div class="modal-card no-carve">
+      <button class="modal-close" id="infoClose" type="button" aria-label="close">&times;</button>
+      <div class="modal-body" id="infoBody">
+        <h2>george cartier bagel sundial project, July 25, 2026</h2>
+        <p>This project started as I was making a pilgrimage to the montreal bagel bakeries. Montreal is <em>really</em> into bagels, and there is a fierce rivalry between the two oldest bakeries in Mile End, La Viateur and Fairmount. It's a different bagel culture than the northern US/jewish culture that I grew up with, and I was curious to see how far the rabbit hole went.</p>
+        <p>As I made my pilgrimage over Mt. Royal, I passed by the monument of George-Etienne Cartier at the foot of the mountain, and the thought floated into my mind that it would make a funny gnomon — the shape in the center of a sundial that casts a shadow — and the mechanism could be that the statue tells you which bagel bakery to go to at any given time based on which way its shadow points. The monument is tipped with La Renommée, the goddess of fame, with an outstretched arm, which felt very apropos. I walked around the statue and took 34 photos from different angles, which I photogrammetried together to make a 3D model of the monument.</p>
+        <p>The rest of this project came together in a morning with the help of claude and three new montreal friends. The idea was to render the statue in a webgl context, tile a plane with open streetmap tiles, and use a simple javascript library to model the sun position based on the date, time of day, and the lat/long of the statue. With the sun position, we can calculate a shadow, and map a point on La Renommée's hand to the corresponding point on the shadow. Then, I draw a vector from a point at the base of the statue to the shadow of the outstretched hand, and that's the vector that indicates which way the statue is pointing. I load a CSV file of all the lat/long positions of the bagel shops in montreal, and I figure out the vectors from the base of the statue to each shop, and I point the user to the one that is closest to the shadow vector.</p>
+        <p>We discussed a bit about a bagel pilgrimage ceremony where you bring an offering to M. Cartier of some shmear, place it in the mouths of the four guardian lions around his monument, and then he will lead you to the promised bagel land. I haven't followed the ritual yet, but I am not very devout, and it's also just something we made up.</p>
+        <p>The next issue is, there are multiple ways to interpret the statue. If you are physically at the statue, you can click on 'AR' mode on the button at the top, and it will use augmented reality to draw a dial around the statue that is mapped to the statue's GPS position and size, and you use that dial to interpret which shop the shadow is telling you to go towards. If you are just on a computer and try it out, just use the main view, which is a 3D view of the statue. Some people are visual learners, and could use an AR cartier in front of them, and for those people, I recommend the 'george anywhere' option, which you can load on your phone to get an AR george in front of you, pointing the way to the nearest bagel shop and counting down the distance from your position to the shop. Finally, for the unfortunate souls who are not in Montreal, you can use the 'watch' feature, which uses AR to place a 3D model of george's monument on your wrist like a gnomon wristwatch, and based on the position of the statue's shadow in montreal, will look up the nearest bagel shops to you, based on your geocoded location anywhere in the world, and you can follow george's directional guidance towards one of those shops.</p>
+        <p>The code is built in node and webXR, with claude's help, and the source is available here: <a href="https://github.com/enjrolas/george-cartier-bagel-sundial" target="_blank" rel="noopener">github.com/enjrolas/george-cartier-bagel-sundial</a></p>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="js/main.js"></script>
 </body>

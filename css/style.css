@@ -74,6 +74,50 @@ body {
   color: var(--ink-faint);
 }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
+.info-btn {
+  width: 30px; height: 30px; flex: 0 0 auto;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  background: transparent; color: var(--accent);
+  font-family: var(--font); font-style: italic; font-size: 16px;
+  text-transform: none; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .15s, color .15s;
+}
+.info-btn:hover { background: var(--accent); color: #241706; }
+
+/* ---------- info modal ---------- */
+.modal {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  background: rgba(5, 7, 10, 0.72);
+  backdrop-filter: blur(2px);
+}
+.modal-card {
+  position: relative;
+  width: 100%; max-width: 560px; max-height: 82vh; overflow-y: auto;
+  background: var(--panel-2);
+  border: 1px solid var(--edge-hi);
+  border-radius: 14px;
+  padding: 30px 28px;
+}
+.modal-close {
+  position: absolute; top: 8px; right: 12px;
+  background: none; border: none; color: var(--ink-dim);
+  font-size: 26px; line-height: 1; cursor: pointer;
+}
+.modal-close:hover { color: var(--ink); }
+.modal-body {
+  color: var(--ink);
+  font-family: var(--font);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 15px; line-height: 1.6;
+}
+.modal-body h2 { margin: 0 0 12px; font-size: 20px; color: var(--accent); }
+.modal-body p { margin: 0 0 12px; }
+.modal-body a { color: var(--accent-2); }
 .ar-link {
   font-size: 12px;
   color: var(--accent);

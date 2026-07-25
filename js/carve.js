@@ -9,7 +9,8 @@
     if (node.nodeType === 3) {                 // text node
       const v = vify(node.nodeValue);
       if (v !== node.nodeValue) node.nodeValue = v;
-    } else if (node.nodeType === 1 && !SKIP.has(node.tagName)) {
+    } else if (node.nodeType === 1 && !SKIP.has(node.tagName) &&
+               !(node.classList && node.classList.contains('no-carve'))) {
       for (let c = node.firstChild; c; c = c.nextSibling) process(c);
     }
   }

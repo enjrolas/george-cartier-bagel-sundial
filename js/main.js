@@ -129,6 +129,16 @@ function setActiveView(w) {
 els.viewCity.addEventListener('click', () => { viewer.zoomTo('city'); setActiveView('city'); });
 els.viewStatue.addEventListener('click', () => { viewer.zoomTo('statue'); setActiveView('statue'); });
 
+// info modal
+const infoBtn = $('infoBtn'), infoModal = $('infoModal'), infoClose = $('infoClose');
+if (infoBtn && infoModal) {
+  const closeInfo = () => { infoModal.hidden = true; };
+  infoBtn.addEventListener('click', () => { infoModal.hidden = false; });
+  infoClose.addEventListener('click', closeInfo);
+  infoModal.addEventListener('click', (e) => { if (e.target === infoModal) closeInfo(); });
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeInfo(); });
+}
+
 // ---- boot ----
 setNow();
 setActiveView('statue');   // default view is the statue
