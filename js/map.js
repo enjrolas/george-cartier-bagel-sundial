@@ -6,7 +6,7 @@ import { destination, greatCirclePath, haversine } from './geo.js';
 const MAX_KM = 20015; // half the earth's circumference — the antipode
 
 export function createMap(elId, origin) {
-  const map = L.map(elId, { worldCopyJump: true, zoomControl: true }).setView([origin.lat, origin.lon], 3);
+  const map = L.map(elId, { worldCopyJump: true, zoomControl: true }).setView([origin.lat, origin.lon], 11);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 18,
     attribution: '&copy; OpenStreetMap',
@@ -18,6 +18,35 @@ export function createMap(elId, origin) {
 
   const line = L.polyline([], { color: '#4fd0e3', weight: 2, opacity: 0.9 }).addTo(map);
 
+  // --- bagel bakeries ---
+  const bakeryLayer = L.layerGroup().addTo(map);
+  let bakeryMarkers = [];
+  const DEFAULT_STYLE = { radius: 4, color: '#5a6472', weight: 1, fillColor: '#8a94a4', fillOpacity: 0.85 };
+  const TARGET_STYLE = { radius: 7, color: '#ffd166', weight: 2, fillColor: '#ffb454', fillOpacity: 1 };
+  let targetIdx = -1;
+
+  function plotBakeries(list) {
+    bakeryLayer.clearLayers();
+    bakeryMarkers = list.map((b) => {
+      const m = L.circleMarker([b.lat, b.lon], DEFAULT_STYLE)
+        .bindTooltip(b.name, { direction: 'top' })
+        .bindPopup(`<b>${b.name}</b><br>${b.address || ''}`);
+      bakeryLayer.addLayer(m);
+      return m;
+    });
+  }
+
+  // Highlight the bakery the shadow points at.
+  function setTarget(idx) {
+    if (targetIdx >= 0 && bakeryMarkers[targetIdx]) bakeryMarkers[targetIdx].setStyle(DEFAULT_STYLE);
+    targetIdx = idx;
+    if (idx >= 0 && bakeryMarkers[idx]) {
+      const m = bakeryMarkers[idx];
+      m.setStyle(TARGET_STYLE);
+      m.bringToFront();
+    }
+  }
+
   const rangeMarker = L.marker([origin.lat, origin.lon], { draggable: true, autoPan: true }).addTo(map);
   const label = L.tooltip({ permanent: true, direction: 'top', className: 'marker-label', offset: [0, -8] });
   rangeMarker.bindTooltip(label);
@@ -26,6 +55,12 @@ export function createMap(elId, origin) {
   let distanceKm = 3000;
   let markerCb = () => {};      // ({lat,lon,km}) => void  (fires whenever the marker moves)
   let geocodeTimer = null;
+  let labelBase = '';           // coords + km
+  let labelPlace = '';          // reverse-geocoded name
+
+  function renderLabel() {
+    label.setContent(labelPlace ? `${labelBase}<br>${labelPlace}` : labelBase);
+  }
 
   function setBearing(b) {
     bearing = b;
@@ -46,7 +81,9 @@ export function createMap(elId, origin) {
   function placeMarker(km, doGeocode) {
     const [lat, lon] = destination(origin.lat, origin.lon, bearing, km);
     rangeMarker.setLatLng([lat, lon]);
-    label.setContent(`${fmt(lat)}, ${fmt(lon)} · ${Math.round(km).toLocaleString()} km`);
+    labelBase = `${fmt(lat)}, ${fmt(lon)} · ${Math.round(km).toLocaleString()} km`;
+    labelPlace = '';
+    renderLabel();
     rangeMarker.openTooltip();
     markerCb({ lat, lon, km });
     if (doGeocode) scheduleGeocode(lat, lon);
@@ -61,7 +98,9 @@ export function createMap(elId, origin) {
     distanceKm = km;
     const [lat, lon] = destination(origin.lat, origin.lon, bearing, km);
     rangeMarker.setLatLng([lat, lon]);
-    label.setContent(`${fmt(lat)}, ${fmt(lon)} · ${Math.round(km).toLocaleString()} km`);
+    labelBase = `${fmt(lat)}, ${fmt(lon)} · ${Math.round(km).toLocaleString()} km`;
+    labelPlace = '';
+    renderLabel();
     markerCb({ lat, lon, km }); // update the slider + readout live
   });
   rangeMarker.on('dragend', () => {
@@ -69,18 +108,22 @@ export function createMap(elId, origin) {
     scheduleGeocode(p.lat, p.lng);
   });
 
-  let placeCb = () => {};
   function scheduleGeocode(lat, lon) {
-    placeCb({ loading: true });
+    labelPlace = 'locating…';
+    renderLabel();
     clearTimeout(geocodeTimer);
-    geocodeTimer = setTimeout(() => reverseGeocode(lat, lon).then(placeCb), 600);
+    geocodeTimer = setTimeout(() => reverseGeocode(lat, lon).then((r) => {
+      labelPlace = r.name;
+      renderLabel();
+    }), 600);
   }
 
   return {
     setBearing,
     setDistance,
+    plotBakeries,
+    setTarget,
     onMarker(cb) { markerCb = cb; },
-    onPlace(cb) { placeCb = cb; },
     invalidate() { map.invalidateSize(); },
   };
 }
