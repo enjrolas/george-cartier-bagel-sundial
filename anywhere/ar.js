@@ -32,6 +32,15 @@ let headingOK = false;
 let state = null;         // {azimuth, altitude, below, shadowBrg, target, ang}
 let markerEls = [];       // per-bakery DOM markers
 let shadowMarker = null;
+let xrSupported = false, threePreload = null;
+
+// Boot: preload the bakery list + probe WebXR up front, and preload three.js so
+// Start can jump straight into 3D AR on Android without losing the tap activation.
+const bakeriesReady = loadBakeries();
+(async () => {
+  try { xrSupported = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-ar')); } catch (_) {}
+  if (xrSupported) threePreload = import('three').catch(() => null);
+})();
 
 // ---------- shared computation ----------
 function shadowBearing(azDeg, altDeg) {
@@ -167,12 +176,22 @@ async function startFlow() {
   els.startBtn.disabled = true;
   els.startBtn.textContent = 'starting…';
 
-  // Kick off the gesture-gated permissions synchronously (no await between them)
-  // so iOS keeps the user-activation valid for both camera and motion.
-  const camPromise = startCamera();
-  const orientPromise = requestOrientation();
+  // Motion FIRST (iOS drops a 2nd permission request); also gives heading for the
+  // AR sundial's north alignment. Not awaited so the tap activation stays valid.
+  requestOrientation();
 
-  // Reveal the HUD right away — never block the UI on a pending permission prompt.
+  // Android (WebXR): go straight into the 3D AR sundial. Fall back to the compass
+  // HUD if it can't start. iOS / no-WebXR: compass HUD.
+  if (xrSupported) {
+    els.start.hidden = true;
+    const ok = await enterXR();
+    if (ok) return;
+  }
+  startCompass();
+}
+
+function startCompass() {
+  const camPromise = startCamera();
   els.start.hidden = true;
   els.hud.hidden = false;
   els.bar.hidden = false;
@@ -180,16 +199,14 @@ async function startFlow() {
 
   // no motion data (desktop, etc.) → still runs, but warn it won't track
   setTimeout(() => { if (!headingOK) { const d = document.getElementById('disclaimer'); if (d) d.hidden = false; } }, 1800);
-
   camPromise.catch(() => toast('Camera unavailable — showing compass only.'));
-  orientPromise.catch(() => {});
 
-  try { await loadBakeries(); } catch (_) { toast('Could not load bakery list.'); }
-  buildMarkers();
-  computeState();
-  setInterval(computeState, 5000);
-  requestAnimationFrame(hudFrame);
-  checkXR();
+  bakeriesReady.then(() => {
+    buildMarkers();
+    computeState();
+    setInterval(computeState, 5000);
+    requestAnimationFrame(hudFrame);
+  });
 }
 
 els.xrExit.addEventListener('click', () => { if (xrSession) xrSession.end(); });
@@ -243,9 +260,9 @@ let statueProto = null; // low-poly monument, loaded once for the WebXR sundial
 async function enterXR() {
   let THREE, OBJLoader, sundial, reticle, hitSource = null, placed = false;
   try {
-    THREE = await import('three');
+    THREE = await (threePreload || import('three'));
     ({ OBJLoader } = await import('three/addons/loaders/OBJLoader.js'));
-  } catch (_) { toast('Could not load 3D engine.'); return; }
+  } catch (_) { return false; }
   new OBJLoader().load('../model/3DModel-lowpoly.obj',
     (o) => { fitStatue(THREE, o, 0.6); statueProto = o; }, undefined, () => {});
 
@@ -274,7 +291,7 @@ async function enterXR() {
       optionalFeatures: ['local-floor', 'dom-overlay'],
       domOverlay: { root: els.xrOverlay },
     });
-  } catch (_) { toast('Could not start AR session.'); return; }
+  } catch (_) { return false; }
   xrSession = session;
   els.xrOverlay.hidden = false;
   renderer.xr.setReferenceSpaceType('local');
@@ -318,6 +335,7 @@ async function enterXR() {
     }
     renderer.render(scene, camera);
   });
+  return true;
 }
 
 // world yaw of the camera's horizontal forward direction

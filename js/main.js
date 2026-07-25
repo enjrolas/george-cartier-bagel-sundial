@@ -129,6 +129,15 @@ function setActiveView(w) {
 els.viewCity.addEventListener('click', () => { viewer.zoomTo('city'); setActiveView('city'); });
 els.viewStatue.addEventListener('click', () => { viewer.zoomTo('statue'); setActiveView('statue'); });
 
+// Only show the "AR" link where WebXR can actually run (Android/ARCore). On iOS
+// and desktop it's hidden — use George Anywhere / Watch instead.
+(async () => {
+  const arLink = document.querySelector('a.ar-link[href="/ar/"]');
+  if (!arLink) return;
+  const ok = navigator.xr && await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
+  if (!ok) arLink.style.display = 'none';
+})();
+
 // info modal
 const infoBtn = $('infoBtn'), infoModal = $('infoModal'), infoClose = $('infoClose');
 if (infoBtn && infoModal) {
