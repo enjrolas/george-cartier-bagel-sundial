@@ -3,18 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Gnomon &middot; shadow-to-map sundial</title>
-  <meta name="description" content="Track the shadow of a 3D object and trace where it points on the globe, like a planetary sundial." />
-
-  <!-- Leaflet (global L) -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <title>George Cartier Bagel Sundial</title>
+  <meta name="description" content="The Monument George-Étienne Cartier as a giant sundial: cast its shadow for any date/time and see which Montréal bagel shop the bearing points at." />
 
   <link rel="stylesheet" href="css/style.css" />
 
-  <!-- three.js as ES modules -->
   <script type="importmap">
   {
     "imports": {
@@ -29,70 +22,53 @@
     <div class="brand">
       <span class="brand-mark">◵</span>
       <div class="brand-text">
-        <h1>Gnomon</h1>
-        <p>Where the shadow points</p>
+        <h1>George Cartier Bagel Sundial</h1>
+        <p>Where the monument's shadow points</p>
       </div>
     </div>
-    <div class="loc-readout" id="locReadout">45.5142&deg;N, 73.5852&deg;W &middot; Montréal</div>
+    <div class="topbar-right">
+      <a class="ar-link" href="/ar/">◎ AR</a>
+      <a class="ar-link" href="/watch/">⌚ watch</a>
+      <div class="loc-readout" id="locReadout">45.5142&deg;N, 73.5852&deg;W &middot; Montréal</div>
+    </div>
   </header>
 
   <main class="stage">
-    <!-- 3D viewer -->
-    <section class="panel viewer">
-      <div class="panel-label">Object &amp; shadow</div>
-      <div id="viewer3d" class="viewer3d"></div>
-      <div class="viewer-legend">
-        <span class="lg lg-north">N</span>
-        <span class="lg lg-tip">shadow tip</span>
-        <span class="lg lg-ray">base → tip</span>
-      </div>
-      <div id="viewerNote" class="viewer-note" hidden></div>
-    </section>
-
-    <!-- Map -->
-    <section class="panel mapwrap">
-      <div class="panel-label">Bearing on the globe</div>
-      <div id="map" class="map"></div>
-    </section>
+    <div id="scene" class="scene"></div>
+    <div class="scene-tools">
+      <button class="btn" id="viewCity" type="button">City view</button>
+      <button class="btn" id="viewStatue" type="button">Zoom to statue</button>
+    </div>
+    <div class="viewer-legend">
+      <span class="lg lg-tip">shadow tip</span>
+      <span class="lg lg-beam">points to bagel</span>
+      <span class="lg lg-mon">monument</span>
+    </div>
+    <div id="viewerNote" class="viewer-note" hidden></div>
   </main>
 
-  <!-- Controls -->
   <section class="controls">
     <div class="ctl-group">
       <label class="ctl">
         <span class="ctl-title">Date</span>
-        <input type="date" id="date" value="2026-07-25" />
-      </label>
-      <label class="ctl">
-        <span class="ctl-title">Time <em id="tzLabel">(local)</em></span>
-        <input type="time" id="time" value="13:00" step="60" />
+        <input type="date" id="date" />
       </label>
       <button id="nowBtn" class="btn" type="button">Now</button>
     </div>
-
     <div class="ctl-group">
       <label class="ctl ctl-slider">
-        <span class="ctl-title">Model heading <em id="headingVal">0°</em></span>
-        <input type="range" id="heading" min="0" max="359" value="0" step="1" />
-        <span class="ctl-hint">rotate object relative to true north</span>
-      </label>
-    </div>
-
-    <div class="ctl-group">
-      <label class="ctl ctl-slider">
-        <span class="ctl-title">Range along bearing <em id="distVal">3,000 km</em></span>
-        <input type="range" id="distance" min="0" max="20000" value="3000" step="10" />
-        <span class="ctl-hint">or drag the marker on the map</span>
+        <span class="ctl-title">Time <em id="timeVal">—</em> <em id="tzLabel">(local)</em></span>
+        <input type="range" id="timeSlider" min="0" max="1439" step="1" value="780" />
+        <span class="ctl-hint">scrub through the day to sweep the shadow</span>
       </label>
     </div>
   </section>
 
-  <!-- Readout strip -->
   <section class="readouts" id="readouts">
     <div class="ro"><span class="ro-k">Sun</span><span class="ro-v" id="roSun">—</span></div>
     <div class="ro"><span class="ro-k">Shadow bearing</span><span class="ro-v" id="roBearing">—</span></div>
-    <div class="ro"><span class="ro-k">Tip offset</span><span class="ro-v" id="roTip">—</span></div>
-    <div class="ro"><span class="ro-k">Line offset</span><span class="ro-v" id="roOffset">—</span></div>
+    <div class="ro"><span class="ro-k">Shadow length</span><span class="ro-v" id="roTip">—</span></div>
+    <div class="ro"><span class="ro-k">Alignment</span><span class="ro-v" id="roOffset">—</span></div>
     <div class="ro ro-wide"><span class="ro-k">Points to (bagel)</span><span class="ro-v" id="roPlace">—</span></div>
   </section>
 

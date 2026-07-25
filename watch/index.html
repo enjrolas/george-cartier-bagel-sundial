@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Bagel Sundial Watch — George Cartier</title>
+  <meta name="description" content="A tiny George-Étienne Cartier statue on your wrist, casting Montréal's shadow — pointing you to a bagel shop within 10 km, wherever you are." />
+
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- MediaPipe Hands (classic globals: Hands, Camera) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <video id="cam" playsinline muted></video>
+
+  <!-- the tiny statue that rides on your wrist -->
+  <div id="stage" class="stage" hidden></div>
+
+  <!-- guidance when no wrist is in frame -->
+  <div id="findWrist" class="find-wrist" hidden>point the camera at your wrist ✋</div>
+
+  <header class="bar" id="bar" hidden>
+    <a class="back" href="/">‹ map</a>
+    <div class="bar-mid" id="barInfo">—</div>
+  </header>
+
+  <footer class="info" id="info" hidden>
+    <div class="info-dir" id="infoDir">—</div>
+    <div class="info-target" id="infoTarget">looking for bagels near you…</div>
+    <div class="info-sub" id="infoSub">—</div>
+  </footer>
+
+  <div id="start" class="start">
+    <div class="start-card">
+      <div class="mark">⌚</div>
+      <h1>Bagel Sundial <span>Watch</span></h1>
+      <p>Hold your phone toward your wrist. A tiny <b>Monument George-Étienne Cartier</b> appears there, casting the shadow it's casting in Montréal <i>right now</i> — and that shadow points you toward a bagel shop within <b>10&nbsp;km</b> of wherever you are.</p>
+      <button id="startBtn" class="btn big" type="button">Start</button>
+      <p class="fine">Needs camera, motion &amp; location. Loads a hand-tracking model (~a few MB).</p>
+      <a class="fine link" href="/ar/">or try the AR compass instead</a>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="watch.js"></script>
+</body>
+</html>

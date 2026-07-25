@@ -5,6 +5,9 @@
 *~
 *.swp
 .DS_Store
+# emacs autosave / lock files
+\#*\#
+.\#*
 
 # scratch
 *.tmp

@@ -1,5 +1,4 @@
 import { createViewer } from './viewer.js';
-import { createMap } from './map.js';
 import { getSunPosition, zonedToUTC, tzAbbrev } from './solar.js';
 import { bearingTo, angularDiff, trackOffset } from './geo.js';
 
@@ -7,119 +6,123 @@ import { bearingTo, angularDiff, trackOffset } from './geo.js';
 const ORIGIN = { lat: 45.514204, lon: -73.585227 };
 const TZ = 'America/Toronto'; // Montréal
 const BAKERY_CSV = 'montreal_bagel_bakeries.csv';
+const HEADING = 207;          // monument's real-world facing, degrees from true north
 
-let bakeries = [];        // {name, lat, lon, address}
-let lastBearing = null;   // remember bearing so control changes re-match
+let bakeries = [];
+let lastBearing = null;
 
 const $ = (id) => document.getElementById(id);
 const els = {
-  date: $('date'), time: $('time'), heading: $('heading'), distance: $('distance'),
-  nowBtn: $('nowBtn'), tzLabel: $('tzLabel'), headingVal: $('headingVal'), distVal: $('distVal'),
+  date: $('date'), timeSlider: $('timeSlider'), timeVal: $('timeVal'),
+  nowBtn: $('nowBtn'), tzLabel: $('tzLabel'),
   roSun: $('roSun'), roBearing: $('roBearing'), roTip: $('roTip'), roOffset: $('roOffset'),
   roPlace: $('roPlace'), note: $('viewerNote'),
+  viewCity: $('viewCity'), viewStatue: $('viewStatue'),
 };
 
-const viewer = createViewer($('viewer3d'));
-const map = createMap('map', ORIGIN);
+const pad = (n) => String(n).padStart(2, '0');
+const minutesToHHMM = (m) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
 
-// keep the slider track fill in sync with its value
 function paintSlider(el) {
   const pct = ((el.value - el.min) / (el.max - el.min)) * 100;
   el.style.background = `linear-gradient(90deg, var(--accent) ${pct}%, var(--edge-hi) ${pct}%)`;
 }
 
-// ---- recompute the sun + shadow bearing (heavy: on date/time/heading change) ----
+// current wall-clock in Montréal → date string + minutes-of-day
+function nowInTZ() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date());
+  const m = {}; for (const p of parts) m[p.type] = p.value;
+  return { date: `${m.year}-${m.month}-${m.day}`, minutes: Number(m.hour) * 60 + Number(m.minute) };
+}
+
+function setNow() {
+  const n = nowInTZ();
+  els.date.value = n.date;
+  els.timeSlider.value = n.minutes;
+  els.timeVal.textContent = minutesToHHMM(n.minutes);
+  paintSlider(els.timeSlider);
+}
+
+// surface any runtime error on-page instead of leaving a blank panel
+function showError(msg) {
+  if (!els.note) return;
+  els.note.hidden = false;
+  els.note.textContent = msg;
+}
+window.addEventListener('error', (e) => showError(`Error: ${e.message}`));
+window.addEventListener('unhandledrejection', (e) => showError(`Error: ${e.reason?.message || e.reason}`));
+
+let viewer;
+try {
+  viewer = createViewer($('scene'), ORIGIN);
+} catch (e) {
+  showError(`Scene failed to start: ${e.message}`);
+  throw e;
+}
+
 function recompute() {
-  const utc = zonedToUTC(els.date.value, els.time.value, TZ);
+  const timeStr = minutesToHHMM(Number(els.timeSlider.value));
+  const utc = zonedToUTC(els.date.value, timeStr, TZ);
   els.tzLabel.textContent = `(${tzAbbrev(utc, TZ)})`;
 
   const { azimuth, altitude } = getSunPosition(utc, ORIGIN.lat, ORIGIN.lon);
   els.roSun.textContent = `${azimuth.toFixed(1)}° az · ${altitude.toFixed(1)}° alt`;
 
   const result = viewer.updateSun(azimuth, altitude);
-
   if (!result) {
     els.note.hidden = false;
     els.note.textContent = altitude <= 0
       ? 'Sun is below the horizon — no shadow at this time.'
       : 'Sun on the horizon — shadow runs to infinity.';
-    els.roBearing.textContent = '—';
-    els.roTip.textContent = '—';
+    els.roBearing.textContent = els.roTip.textContent = els.roOffset.textContent = '—';
+    els.roPlace.textContent = '—';
+    viewer.setTarget(-1);
     return;
   }
   els.note.hidden = true;
-
   els.roBearing.textContent = `${result.bearingDeg.toFixed(1)}° (${compass16(result.bearingDeg)})`;
-  els.roTip.textContent =
-    `E ${result.offsetEast.toFixed(2)} · N ${result.offsetNorth.toFixed(2)} m`;
+  els.roTip.textContent = `${Math.round(result.tipDist)} m`;
 
   lastBearing = result.bearingDeg;
-  map.setBearing(result.bearingDeg);
   matchBakery(result.bearingDeg);
 }
 
-// Find the bakery the shadow bearing points at: the one whose direction from the
-// monument is most closely aligned with the shadow bearing (least angular error).
+// The bakery the shadow points at = least angular deviation from the shadow bearing.
 function matchBakery(bearing) {
   if (!bakeries.length) return;
   let best = -1, bestAng = Infinity;
   bakeries.forEach((b, i) => {
-    const brg = bearingTo(ORIGIN.lat, ORIGIN.lon, b.lat, b.lon);
-    const ang = angularDiff(brg, bearing);
+    const ang = angularDiff(bearingTo(ORIGIN.lat, ORIGIN.lon, b.lat, b.lon), bearing);
     if (ang < bestAng) { bestAng = ang; best = i; }
   });
-  map.setTarget(best);
+  viewer.setTarget(best);
   if (best < 0) { els.roOffset.textContent = '—'; els.roPlace.textContent = '—'; return; }
   const b = bakeries[best];
   const off = trackOffset(ORIGIN.lat, ORIGIN.lon, bearing, b.lat, b.lon);
-  els.roOffset.textContent = `${bestAng.toFixed(1)}° off · ${off.crossKm.toFixed(1)} km · ${off.alongKm.toFixed(1)} km out`;
+  els.roOffset.textContent = `${bestAng.toFixed(1)}° off · ${off.alongKm.toFixed(1)} km away`;
   els.roPlace.textContent = `🥯 ${b.name} — ${b.address}`;
 }
 
-// ---- global range marker readout (secondary explorer) ----
-map.onMarker(({ km }) => {
-  els.distance.value = Math.round(km);
-  els.distVal.textContent = `${Math.round(km).toLocaleString()} km`;
-  paintSlider(els.distance);
-});
-
-// ---- control listeners ----
-['change', 'input'].forEach((ev) => {
-  els.date.addEventListener(ev, recompute);
-  els.time.addEventListener(ev, recompute);
-});
-els.heading.addEventListener('input', () => {
-  els.headingVal.textContent = `${els.heading.value}°`;
-  paintSlider(els.heading);
-  viewer.setHeading(Number(els.heading.value));
+// ---- controls ----
+els.date.addEventListener('change', recompute);
+els.timeSlider.addEventListener('input', () => {
+  els.timeVal.textContent = minutesToHHMM(Number(els.timeSlider.value));
+  paintSlider(els.timeSlider);
   recompute();
 });
-els.distance.addEventListener('input', () => {
-  els.distVal.textContent = `${Number(els.distance.value).toLocaleString()} km`;
-  paintSlider(els.distance);
-  map.setDistance(Number(els.distance.value));
-});
-els.nowBtn.addEventListener('click', () => {
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).formatToParts(now);
-  const m = {}; for (const p of parts) m[p.type] = p.value;
-  els.date.value = `${m.year}-${m.month}-${m.day}`;
-  els.time.value = `${m.hour}:${m.minute}`;
-  recompute();
-});
+els.nowBtn.addEventListener('click', () => { setNow(); recompute(); });
+els.viewCity.addEventListener('click', () => viewer.zoomTo('city'));
+els.viewStatue.addEventListener('click', () => viewer.zoomTo('statue'));
 
 // ---- boot ----
-paintSlider(els.heading);
-paintSlider(els.distance);
-map.setDistance(Number(els.distance.value), false);
-
+setNow();
+viewer.setHeading(HEADING);
 loadBakeries();
-
 viewer.loadModel('model/', '3DModel.mtl', '3DModel.obj')
-  .then(() => { recompute(); setTimeout(() => map.invalidate(), 100); })
+  .then(() => { viewer.setHeading(HEADING); recompute(); })
   .catch((err) => {
     console.error('Model load failed', err);
     els.note.hidden = false;
@@ -131,46 +134,36 @@ async function loadBakeries() {
     const res = await fetch(BAKERY_CSV);
     if (!res.ok) throw new Error(res.status);
     bakeries = parseCSV(await res.text());
-    map.plotBakeries(bakeries);
+    viewer.plotBakeries(bakeries);
     if (lastBearing !== null) matchBakery(lastBearing);
   } catch (e) {
     console.error('Bakery CSV load failed', e);
   }
 }
 
-// Minimal CSV parser: handles quoted fields containing commas. Columns: name,lat,long,street_address
 function parseCSV(text) {
   const rows = [];
   const lines = text.trim().split(/\r?\n/);
-  for (let i = 1; i < lines.length; i++) {       // skip header
+  for (let i = 1; i < lines.length; i++) {
     const cols = splitCSVLine(lines[i]);
     if (cols.length < 3) continue;
-    const lat = parseFloat(cols[1]);
-    const lon = parseFloat(cols[2]);
+    const lat = parseFloat(cols[1]), lon = parseFloat(cols[2]);
     if (Number.isNaN(lat) || Number.isNaN(lon)) continue;
     rows.push({ name: cols[0], lat, lon, address: (cols[3] || '').trim() });
   }
   return rows;
 }
 function splitCSVLine(line) {
-  const out = [];
-  let cur = '', inQ = false;
+  const out = []; let cur = '', inQ = false;
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
-    if (c === '"') {
-      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
-      else inQ = !inQ;
-    } else if (c === ',' && !inQ) {
-      out.push(cur); cur = '';
-    } else {
-      cur += c;
-    }
+    if (c === '"') { if (inQ && line[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+    else if (c === ',' && !inQ) { out.push(cur); cur = ''; }
+    else cur += c;
   }
   out.push(cur);
   return out;
 }
-
-// ---- helpers ----
 function compass16(deg) {
   const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
   return dirs[Math.round(deg / 22.5) % 16];
