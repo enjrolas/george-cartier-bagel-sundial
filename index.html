@@ -4,8 +4,16 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>George Cartier Bagel Sundial</title>
-  <meta name="description" content="The Monument George-Étienne Cartier as a giant sundial: cast its shadow for any date/time and see which Montréal bagel shop the bearing points at." />
+  <meta name="description" content="use the statue of george-etienne cartier as a gnomon, and its shadow at any given time will direct you to a montreal bagel shop" />
+  <meta property="og:title" content="George Cartier Bagel Sundial" />
+  <meta property="og:description" content="use the statue of george-etienne cartier as a gnomon, and its shadow at any given time will direct you to a montreal bagel shop" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:description" content="use the statue of george-etienne cartier as a gnomon, and its shadow at any given time will direct you to a montreal bagel shop" />
 
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
 
   <script type="importmap">
@@ -35,6 +43,8 @@
 
   <main class="stage">
     <div id="scene" class="scene"></div>
+    <div id="loader" class="loader"><div class="bagel">🥯</div><div class="loader-txt">loading</div></div>
+    <div id="pointsTo" class="points-to">—</div>
     <div class="scene-tools">
       <button class="btn" id="viewCity" type="button">City view</button>
       <button class="btn" id="viewStatue" type="button">Zoom to statue</button>
@@ -49,9 +59,10 @@
 
   <section class="controls">
     <div class="ctl-group">
-      <label class="ctl">
-        <span class="ctl-title">Date</span>
-        <input type="date" id="date" />
+      <label class="ctl ctl-slider">
+        <span class="ctl-title">Date <em id="dateVal">—</em></span>
+        <input type="range" id="dateSlider" min="-30" max="30" step="1" value="0" />
+        <span class="ctl-hint">± 30 days</span>
       </label>
       <button id="nowBtn" class="btn" type="button">Now</button>
     </div>
@@ -65,11 +76,7 @@
   </section>
 
   <section class="readouts" id="readouts">
-    <div class="ro"><span class="ro-k">Sun</span><span class="ro-v" id="roSun">—</span></div>
     <div class="ro"><span class="ro-k">Shadow bearing</span><span class="ro-v" id="roBearing">—</span></div>
-    <div class="ro"><span class="ro-k">Shadow length</span><span class="ro-v" id="roTip">—</span></div>
-    <div class="ro"><span class="ro-k">Alignment</span><span class="ro-v" id="roOffset">—</span></div>
-    <div class="ro ro-wide"><span class="ro-k">Points to (bagel)</span><span class="ro-v" id="roPlace">—</span></div>
   </section>
 
   <script type="module" src="js/main.js"></script>

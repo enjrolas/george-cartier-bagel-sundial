@@ -11,8 +11,8 @@
   --accent-2: #4fd0e3;    /* bearing */
   --north: #ff5d6c;
   --tip: #ffd166;
-  --font: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --font: "Cinzel", "Trajan Pro", Georgia, serif;
+  --mono: "Cinzel", "Trajan Pro", Georgia, serif;
 }
 
 * { box-sizing: border-box; }
@@ -25,6 +25,8 @@ html, body {
     var(--bg);
   color: var(--ink);
   font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -244,9 +246,66 @@ input[type="range"]::-moz-range-thumb {
 
 /* ---------- readouts ---------- */
 .readouts {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr) 1.4fr;
+  display: flex;
   gap: 10px;
+}
+.readouts .ro { flex: 0 0 auto; min-width: 180px; }
+
+/* big glowing "points to" banner at the top of the 3D viewport */
+.points-to {
+  position: absolute;
+  z-index: 6;
+  top: 16px; left: 50%;
+  transform: translateX(-50%);
+  max-width: 78%;
+  text-align: center;
+  font-family: var(--font);
+  font-weight: 600;
+  font-size: clamp(20px, 4.4vw, 42px);
+  line-height: 1.1;
+  letter-spacing: 0.06em;
+  color: #eafff0;
+  pointer-events: none;
+  transition: opacity .3s, color .3s;
+  text-shadow:
+    0 0 6px rgba(43,255,134,.75),
+    0 0 20px rgba(43,255,134,.55),
+    0 0 46px rgba(43,255,134,.4);
+}
+.points-to:not(.lit) {
+  color: var(--ink-faint);
+  text-shadow: none;
+  opacity: .7;
+  font-size: clamp(13px, 2vw, 18px);
+}
+
+/* rotating-bagel loader */
+.loader {
+  position: absolute;
+  z-index: 7;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(10,13,18,.6);
+  backdrop-filter: blur(2px);
+}
+.loader .bagel {
+  font-size: 68px;
+  line-height: 1;
+  animation: bagel-spin 1.1s linear infinite;
+  filter: drop-shadow(0 0 14px rgba(255,180,84,.5));
+}
+.loader-txt {
+  font-size: 12px;
+  letter-spacing: 3px;
+  color: var(--ink-dim);
+}
+@keyframes bagel-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 .ro {
   background: var(--panel);

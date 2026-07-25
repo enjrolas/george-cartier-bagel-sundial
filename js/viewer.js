@@ -1,6 +1,6 @@
 // Unified 3D scene: the map is a texture on a ground plane (Web-Mercator OSM
 // tiles), the monument stands at true scale at the centre, its real shadow falls
-// on the map, and a beam extends the shadow's bearing to the matched bakery.
+// on the map, and a green "matrix" triangle points along the shadow's bearing.
 //
 // World units are metres. Axes: +X = East, -Z = North, +Y = Up. North is fixed;
 // the model rotates about its base-centre vertical axis (heading control).
@@ -37,9 +37,11 @@ export function createViewer(container, origin) {
   scene.background = new THREE.Color(0x0c0f14);
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 300000);
-  camera.position.set(0, 34000, 42000);
+  camera.position.set(45, 40, 70); // default: zoomed to the statue
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  // logarithmicDepthBuffer: the scene spans 0.5 m to 300 km, so a linear z-buffer
+  // z-fights between the near-coplanar map planes — a log buffer fixes the flicker.
+  const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -47,7 +49,7 @@ export function createViewer(container, origin) {
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
-  controls.target.set(0, 0, 0);
+  controls.target.set(0, 14, 0);
   controls.maxPolarAngle = Math.PI / 2 - 0.03;
   controls.minDistance = 8;
   controls.maxDistance = 150000;
@@ -71,10 +73,15 @@ export function createViewer(container, origin) {
   grid.position.y = 0.0;
   scene.add(grid);
 
-  // wide city map, and a hi-res patch built lazily when the camera zooms in
-  buildTilePlane(MAP_HALF_M, MAP_ZOOM, -0.1);
-  let localBuilt = false;
-  function buildLocal() { if (!localBuilt) { localBuilt = true; buildTilePlane(LOCAL_HALF_M, LOCAL_ZOOM, 0.03); } }
+  // wide city map, and a hi-res patch built lazily when the camera zooms in.
+  // Only one is ever visible (toggled by distance) so their tiles never z-fight.
+  const cityPlane = buildTilePlane(MAP_HALF_M, MAP_ZOOM, -0.1);
+  let localPlane = null, localBuilt = false;
+  function buildLocal() {
+    if (localBuilt) return;
+    localBuilt = true;
+    localPlane = buildTilePlane(LOCAL_HALF_M, LOCAL_ZOOM, 0.03);
+  }
 
   // shadow-catcher near the statue (keeps the map bright but shows the shadow)
   const catcher = new THREE.Mesh(
@@ -85,44 +92,90 @@ export function createViewer(container, origin) {
   catcher.receiveShadow = true;
   scene.add(catcher);
 
-  // --- overlays ---
-  const beam = makeLine(0x4fd0e3, 3);
-  scene.add(beam);
-  const bearingLine = makeLine(0x2f6b74, 1);
-  scene.add(bearingLine);
-  const tip = makeSprite(makeDotTexture('#ffd166', '#6b5212'), 0xffffff, 0.03);
-  tip.visible = false;
-  scene.add(tip);
+  // --- shadow-vector pointer: a vertical translucent-green 10° triangle with a
+  //     falling ASCII-bagel "matrix", from the statue centre off along the shadow ---
+  const POINTER_LEN = 60000;
+  const POINTER_LOW = Math.tan(1 * DEG);    // bottom edge lifted 1° so it clears the ground
+  const POINTER_HIGH = Math.tan(11 * DEG);  // top edge → 10° apex angle
+  const triGeo = new THREE.BufferGeometry();
+  triGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
+  triGeo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0, 0.5, 1, 0, 1, 1]), 2));
+  triGeo.setIndex([0, 1, 2]);
+  const mCanvas = document.createElement('canvas'); mCanvas.width = 512; mCanvas.height = 256;
+  const mCtx = mCanvas.getContext('2d');
+  const mTex = new THREE.CanvasTexture(mCanvas);
+  const pointer = new THREE.Group();
+  pointer.add(new THREE.Mesh(triGeo, new THREE.MeshBasicMaterial({
+    color: 0x27ff86, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false })));
+  const matrixMesh = new THREE.Mesh(triGeo, new THREE.MeshBasicMaterial({
+    map: mTex, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }));
+  matrixMesh.renderOrder = 3;
+  pointer.add(matrixMesh);
+  pointer.add(new THREE.LineLoop(triGeo, new THREE.LineBasicMaterial({
+    color: 0x9dffc4, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending })));
+  pointer.visible = false;
+  scene.add(pointer);
 
-  // monument beacon (so you can find it when zoomed out)
-  const beacon = makeSprite(makeDotTexture('#ffb454', '#fff'), 0xffffff, 0.055);
-  scene.add(beacon);
+  const MGLYPHS = ['◯', '⊙', '0', 'O', 'o', '()', '◎', 'Ø', 'Q', '🥯'];
+  const MCELL = 18, MCOLS = Math.floor(mCanvas.width / MCELL);
+  const mDrops = Array.from({ length: MCOLS }, () => (Math.random() * 16) | 0);
+  function drawMatrix() {
+    mCtx.fillStyle = 'rgba(0,12,5,0.16)'; mCtx.fillRect(0, 0, mCanvas.width, mCanvas.height);
+    mCtx.font = `${MCELL}px monospace`; mCtx.textBaseline = 'top';
+    for (let i = 0; i < MCOLS; i++) {
+      const x = i * MCELL, y = mDrops[i] * MCELL;
+      mCtx.fillStyle = '#2bff86'; mCtx.fillText(MGLYPHS[(Math.random() * MGLYPHS.length) | 0], x, y - MCELL);
+      mCtx.fillStyle = '#e9fff0'; mCtx.fillText(MGLYPHS[(Math.random() * MGLYPHS.length) | 0], x, y); // bright head
+      mDrops[i]++;
+      if (y > mCanvas.height && Math.random() > 0.955) mDrops[i] = 0;
+    }
+    mTex.needsUpdate = true;
+  }
+  function updatePointer(bearingDeg) {
+    const dx = Math.sin(bearingDeg * DEG), dz = -Math.cos(bearingDeg * DEG);
+    const L = POINTER_LEN, p = triGeo.attributes.position.array;
+    p[0] = 0;      p[1] = 0;                p[2] = 0;       // apex at the centre of the base
+    p[3] = dx * L; p[4] = L * POINTER_LOW;  p[5] = dz * L;  // bottom edge
+    p[6] = dx * L; p[7] = L * POINTER_HIGH; p[8] = dz * L;  // top edge (+10°)
+    triGeo.attributes.position.needsUpdate = true;
+    triGeo.computeBoundingSphere();
+  }
 
   // --- model ---
   const modelGroup = new THREE.Group();
   scene.add(modelGroup);
   let baseCentroid = null, apexLocal = null, modelRoot = null, headingDeg = 0;
+  let bakeryNames = null, dial = null, baseRadius = 20;
 
-  function loadModel(dir, mtlName, objName) {
+  // Loads a single decimated OBJ with baked vertex colours (no MTL/texture).
+  function loadModel(objPath) {
     return new Promise((resolve, reject) => {
-      new MTLLoader().setPath(dir).load(mtlName, (materials) => {
-        materials.preload();
-        new OBJLoader().setMaterials(materials).setPath(dir).load(objName, (obj) => {
-          modelRoot = obj;
-          baseCentroid = centroid(obj, 0.05, false);
-          apexLocal = centroid(obj, 0.98, true);
-          obj.position.x = -baseCentroid.x;
-          obj.position.z = -baseCentroid.z;
-          obj.traverse((c) => {
-            if (c.isMesh) { c.castShadow = true; if (c.material) c.material.side = THREE.DoubleSide; }
+      new OBJLoader().load(objPath, (obj) => {
+        modelRoot = obj;
+        obj.traverse((c) => {
+          if (!c.isMesh) return;
+          c.geometry.computeVertexNormals();
+          const hasColor = !!c.geometry.getAttribute('color');
+          c.material = new THREE.MeshStandardMaterial({
+            vertexColors: hasColor, color: hasColor ? 0xffffff : 0xb9bcc2,
+            roughness: 0.9, metalness: 0.03, side: THREE.DoubleSide,
           });
-          // scale raw model (~0.93 units tall) up to true height in metres
-          const rawH = apexLocal.y - baseCentroid.y;
-          modelGroup.scale.setScalar(STATUE_HEIGHT_M / rawH);
-          modelGroup.add(obj);
-          setHeading(headingDeg);
-          resolve(obj);
-        }, undefined, reject);
+          c.castShadow = true;
+        });
+        baseCentroid = centroid(obj, 0.05, false);
+        apexLocal = centroid(obj, 0.98, true);
+        obj.position.x = -baseCentroid.x;
+        obj.position.z = -baseCentroid.z;
+        // scale raw model (~0.93 units tall) up to true height in metres
+        const rawH = apexLocal.y - baseCentroid.y;
+        modelGroup.scale.setScalar(STATUE_HEIGHT_M / rawH);
+        modelGroup.add(obj);
+        setHeading(headingDeg);
+        const box = new THREE.Box3().setFromObject(modelGroup);
+        const sz = new THREE.Vector3(); box.getSize(sz);
+        baseRadius = Math.max(sz.x, sz.z) / 2;
+        tryBuildDial();
+        resolve(obj);
       }, undefined, reject);
     });
   }
@@ -165,7 +218,7 @@ export function createViewer(container, origin) {
     sun.target.position.set(0, 0, 0);
 
     if (altDeg <= 0.05 || !apexLocal || !modelRoot) {
-      tip.visible = false; beam.visible = false; bearingLine.visible = false;
+      pointer.visible = false;
       return null;
     }
     modelGroup.updateMatrixWorld(true);
@@ -174,17 +227,12 @@ export function createViewer(container, origin) {
     const sx = apex.x - apex.y * Math.sin(az) * k;
     const sz = apex.z + apex.y * Math.cos(az) * k;
 
-    tip.position.set(sx, 2, sz);
-    tip.visible = true;
-
     const offsetEast = sx, offsetNorth = -sz;
     let bearing = Math.atan2(offsetEast, offsetNorth) / DEG;
     if (bearing < 0) bearing += 360;
 
-    // faint reference line straight out along the bearing, to the map edge
-    const far = MAP_HALF_M * 1.4;
-    setLine(bearingLine, 0, 0, 0, Math.sin(bearing * DEG) * far, 0, -Math.cos(bearing * DEG) * far);
-    bearingLine.visible = true;
+    updatePointer(bearing);
+    pointer.visible = true;
 
     return { bearingDeg: bearing, offsetEast, offsetNorth, tipDist: Math.hypot(sx, sz) };
   }
@@ -206,6 +254,11 @@ export function createViewer(container, origin) {
       scene.add(s);
       bakerySprites.push(s);
     });
+    // dial shows only the nearest shops (top 10); the map still shows them all
+    const withDist = list.map((b, i) => ({ name: b.name, d: Math.hypot(bakeryWorld[i].x, bakeryWorld[i].z) }));
+    withDist.sort((a, b) => a.d - b.d);
+    bakeryNames = withDist.slice(0, 10).map((o) => o.name);
+    tryBuildDial();
   }
 
   function setTarget(idx) {
@@ -217,12 +270,66 @@ export function createViewer(container, origin) {
     if (idx >= 0 && bakerySprites[idx]) {
       const s = bakerySprites[idx];
       s.material.map = targetTex; s.scale.setScalar(0.05);
-      const w = bakeryWorld[idx];
-      setLine(beam, 0, 2, 0, w.x, 40, w.z);
-      beam.visible = true;
-    } else {
-      beam.visible = false;
     }
+  }
+
+  // --- dial: a watch-bezel ring on the map, milled steel with black
+  //     powder-coated bagel-shop names, radius 25% larger than the statue base ---
+  function tryBuildDial() {
+    if (dial || !bakeryNames || !modelRoot) return;
+    dial = buildDial(bakeryNames, baseRadius * 1.25);
+    scene.add(dial);
+  }
+  function buildDial(names, dialR) {
+    const S = 1024, c = S / 2, rOut = S * 0.5, rIn = rOut * 0.8; // inner rim = statue base
+    const cnv = document.createElement('canvas'); cnv.width = cnv.height = S;
+    const x = cnv.getContext('2d');
+    // milled-steel band
+    x.save();
+    x.beginPath(); x.arc(c, c, rOut, 0, 7); x.arc(c, c, rIn, 0, 7, true); x.clip();
+    const grad = x.createRadialGradient(c, c, rIn, c, c, rOut);
+    grad.addColorStop(0, '#8b9199'); grad.addColorStop(0.5, '#c6ccd2');
+    grad.addColorStop(0.72, '#7e848c'); grad.addColorStop(1, '#b0b6bd');
+    x.fillStyle = grad; x.fillRect(0, 0, S, S);
+    for (let r = rIn; r < rOut; r += 2) { // turned/concentric milling
+      x.beginPath(); x.arc(c, c, r, 0, 7);
+      x.strokeStyle = (r & 2) ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.09)';
+      x.lineWidth = 1; x.stroke();
+    }
+    x.restore();
+    x.strokeStyle = '#565c64'; x.lineWidth = 4; x.beginPath(); x.arc(c, c, rOut - 3, 0, 7); x.stroke();
+    x.strokeStyle = '#e9edf1'; x.lineWidth = 2; x.beginPath(); x.arc(c, c, rIn + 3, 0, 7); x.stroke();
+    // carved-stone names: Roman-inscription style (uppercase, U→V), engraved,
+    // and word-wrapped onto multiple lines so nothing overlaps
+    const rText = (rIn + rOut) / 2, n = names.length;
+    const fs = n <= 10 ? 26 : 18;
+    const lineH = fs * 1.02;
+    const maxW = (2 * Math.PI * rIn / n) * 0.86;  // tangential room at the inner rim
+    x.font = `700 ${fs}px "Trajan Pro", "Cinzel", "Times New Roman", Georgia, serif`;
+    try { x.letterSpacing = '2px'; } catch (_) {}
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+      const label = names[i].toUpperCase().replace(/U/g, 'V');
+      const lines = wrapToWidth(x, label, maxW).slice(0, 3);
+      x.save();
+      x.translate(c + Math.cos(a) * rText, c + Math.sin(a) * rText);
+      x.rotate(a + Math.PI / 2);
+      const total = (lines.length - 1) * lineH;
+      lines.forEach((ln, li) => {
+        const yy = li * lineH - total / 2;
+        x.fillStyle = 'rgba(255,255,255,0.5)'; x.fillText(ln, 0.8, yy + 1); // engraved highlight
+        x.fillStyle = '#111316'; x.fillText(ln, 0, yy);                     // dark incision
+      });
+      x.restore();
+    }
+    const tex = new THREE.CanvasTexture(cnv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+    const mesh = new THREE.Mesh(
+      new THREE.CircleGeometry(dialR, 96).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
+    );
+    mesh.position.y = 0.3;
+    return mesh;
   }
 
   function zoomTo(where) {
@@ -282,8 +389,16 @@ export function createViewer(container, origin) {
       camera.updateProjectionMatrix();
     }
     controls.update();
+    if (pointer.visible) drawMatrix();
     // pull in the hi-res patch once the camera is close, however the zoom happened
-    if (!localBuilt && camera.position.distanceTo(controls.target) < LOCAL_TRIGGER_M) buildLocal();
+    const camDist = camera.position.distanceTo(controls.target);
+    if (!localBuilt && camDist < LOCAL_TRIGGER_M) buildLocal();
+    // show exactly one map plane so the two tile sets never overlap / flicker
+    if (localPlane) {
+      const close = camDist < LOCAL_HALF_M * 4;
+      localPlane.visible = close;
+      cityPlane.visible = !close;
+    }
     renderer.render(scene, camera);
     requestAnimationFrame(tick);
   }
@@ -299,14 +414,16 @@ function latToPixelY(lat, z) {
   return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * TILE * 2 ** z;
 }
 
-function makeLine(color, width) {
-  const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-  return new THREE.Line(g, new THREE.LineBasicMaterial({ color, linewidth: width }));
-}
-function setLine(line, ax, ay, az, bx, by, bz) {
-  const p = line.geometry.attributes.position;
-  p.setXYZ(0, ax, ay, az); p.setXYZ(1, bx, by, bz); p.needsUpdate = true;
-  line.geometry.computeBoundingSphere();
+function wrapToWidth(ctx, text, maxW) {
+  const words = text.split(/\s+/);
+  const lines = []; let cur = '';
+  for (const w of words) {
+    const t = cur ? cur + ' ' + w : w;
+    if (cur && ctx.measureText(t).width > maxW) { lines.push(cur); cur = w; }
+    else cur = t;
+  }
+  if (cur) lines.push(cur);
+  return lines;
 }
 function makeSprite(tex, color, scale = 0.032) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color, depthTest: false, sizeAttenuation: false }));

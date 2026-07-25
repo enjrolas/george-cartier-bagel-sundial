@@ -4,7 +4,7 @@
   --accent-2: #4fd0e3;
   --target: #ffd166;
   --panel: rgba(14, 17, 22, 0.82);
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --mono: "Cinzel", "Trajan Pro", Georgia, serif;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }   /* make the hidden attribute win over display:grid/flex */
@@ -12,6 +12,7 @@ html, body {
   margin: 0; height: 100%; overflow: hidden;
   background: #05070a; color: var(--ink);
   font-family: var(--mono);
+  text-transform: uppercase; letter-spacing: 0.04em;
   -webkit-font-smoothing: antialiased;
 }
 

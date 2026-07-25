@@ -1,6 +1,6 @@
 import { createViewer } from './viewer.js';
 import { getSunPosition, zonedToUTC, tzAbbrev } from './solar.js';
-import { bearingTo, angularDiff, trackOffset } from './geo.js';
+import { bearingTo, angularDiff } from './geo.js';
 
 // ---- fixed site parameters ----
 const ORIGIN = { lat: 45.514204, lon: -73.585227 };
@@ -13,15 +13,18 @@ let lastBearing = null;
 
 const $ = (id) => document.getElementById(id);
 const els = {
-  date: $('date'), timeSlider: $('timeSlider'), timeVal: $('timeVal'),
+  dateSlider: $('dateSlider'), dateVal: $('dateVal'),
+  timeSlider: $('timeSlider'), timeVal: $('timeVal'),
   nowBtn: $('nowBtn'), tzLabel: $('tzLabel'),
-  roSun: $('roSun'), roBearing: $('roBearing'), roTip: $('roTip'), roOffset: $('roOffset'),
-  roPlace: $('roPlace'), note: $('viewerNote'),
+  roBearing: $('roBearing'), pointsTo: $('pointsTo'),
+  note: $('viewerNote'), loader: $('loader'),
   viewCity: $('viewCity'), viewStatue: $('viewStatue'),
 };
 
 const pad = (n) => String(n).padStart(2, '0');
 const minutesToHHMM = (m) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
 function paintSlider(el) {
   const pct = ((el.value - el.min) / (el.max - el.min)) * 100;
@@ -38,20 +41,33 @@ function nowInTZ() {
   return { date: `${m.year}-${m.month}-${m.day}`, minutes: Number(m.hour) * 60 + Number(m.minute) };
 }
 
+// date `offset` days from today (Montréal) → {iso, label}
+function dateFromOffset(off) {
+  const [y, m, d] = nowInTZ().date.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d) + off * 86400000);
+  return {
+    iso: `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`,
+    label: `${DOW[dt.getUTCDay()]} ${MON[dt.getUTCMonth()]} ${dt.getUTCDate()}`,
+  };
+}
+function updateDateLabel() { els.dateVal.textContent = dateFromOffset(Number(els.dateSlider.value)).label; }
+
 function setNow() {
   const n = nowInTZ();
-  els.date.value = n.date;
+  els.dateSlider.value = 0;
   els.timeSlider.value = n.minutes;
+  updateDateLabel();
   els.timeVal.textContent = minutesToHHMM(n.minutes);
-  paintSlider(els.timeSlider);
+  paintSlider(els.dateSlider); paintSlider(els.timeSlider);
 }
 
-// surface any runtime error on-page instead of leaving a blank panel
-function showError(msg) {
-  if (!els.note) return;
-  els.note.hidden = false;
-  els.note.textContent = msg;
+function setPointsTo(text, lit) {
+  els.pointsTo.textContent = text;
+  els.pointsTo.classList.toggle('lit', lit);
 }
+
+// surface any runtime error on-page instead of a blank panel
+function showError(msg) { if (els.note) { els.note.hidden = false; els.note.textContent = msg; } }
 window.addEventListener('error', (e) => showError(`Error: ${e.message}`));
 window.addEventListener('unhandledrejection', (e) => showError(`Error: ${e.reason?.message || e.reason}`));
 
@@ -64,28 +80,25 @@ try {
 }
 
 function recompute() {
+  const dateStr = dateFromOffset(Number(els.dateSlider.value)).iso;
   const timeStr = minutesToHHMM(Number(els.timeSlider.value));
-  const utc = zonedToUTC(els.date.value, timeStr, TZ);
+  const utc = zonedToUTC(dateStr, timeStr, TZ);
   els.tzLabel.textContent = `(${tzAbbrev(utc, TZ)})`;
 
   const { azimuth, altitude } = getSunPosition(utc, ORIGIN.lat, ORIGIN.lon);
-  els.roSun.textContent = `${azimuth.toFixed(1)}° az · ${altitude.toFixed(1)}° alt`;
-
   const result = viewer.updateSun(azimuth, altitude);
   if (!result) {
     els.note.hidden = false;
     els.note.textContent = altitude <= 0
-      ? 'Sun is below the horizon — no shadow at this time.'
+      ? 'The sun is below the horizon — no shadow at this time.'
       : 'Sun on the horizon — shadow runs to infinity.';
-    els.roBearing.textContent = els.roTip.textContent = els.roOffset.textContent = '—';
-    els.roPlace.textContent = '—';
+    els.roBearing.textContent = '—';
+    setPointsTo(altitude <= 0 ? 'no shadow right now' : '—', false);
     viewer.setTarget(-1);
     return;
   }
   els.note.hidden = true;
   els.roBearing.textContent = `${result.bearingDeg.toFixed(1)}° (${compass16(result.bearingDeg)})`;
-  els.roTip.textContent = `${Math.round(result.tipDist)} m`;
-
   lastBearing = result.bearingDeg;
   matchBakery(result.bearingDeg);
 }
@@ -99,15 +112,12 @@ function matchBakery(bearing) {
     if (ang < bestAng) { bestAng = ang; best = i; }
   });
   viewer.setTarget(best);
-  if (best < 0) { els.roOffset.textContent = '—'; els.roPlace.textContent = '—'; return; }
-  const b = bakeries[best];
-  const off = trackOffset(ORIGIN.lat, ORIGIN.lon, bearing, b.lat, b.lon);
-  els.roOffset.textContent = `${bestAng.toFixed(1)}° off · ${off.alongKm.toFixed(1)} km away`;
-  els.roPlace.textContent = `🥯 ${b.name} — ${b.address}`;
+  if (best < 0) { setPointsTo('—', false); return; }
+  setPointsTo(`🥯 ${bakeries[best].name}`, true);
 }
 
 // ---- controls ----
-els.date.addEventListener('change', recompute);
+els.dateSlider.addEventListener('input', () => { updateDateLabel(); paintSlider(els.dateSlider); recompute(); });
 els.timeSlider.addEventListener('input', () => {
   els.timeVal.textContent = minutesToHHMM(Number(els.timeSlider.value));
   paintSlider(els.timeSlider);
@@ -121,10 +131,11 @@ els.viewStatue.addEventListener('click', () => viewer.zoomTo('statue'));
 setNow();
 viewer.setHeading(HEADING);
 loadBakeries();
-viewer.loadModel('model/', '3DModel.mtl', '3DModel.obj')
-  .then(() => { viewer.setHeading(HEADING); recompute(); })
+viewer.loadModel('model/3DModel-main.obj')
+  .then(() => { viewer.setHeading(HEADING); recompute(); els.loader.hidden = true; })
   .catch((err) => {
     console.error('Model load failed', err);
+    els.loader.hidden = true;
     els.note.hidden = false;
     els.note.textContent = 'Could not load the 3D model.';
   });
@@ -165,6 +176,6 @@ function splitCSVLine(line) {
   return out;
 }
 function compass16(deg) {
-  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
   return dirs[Math.round(deg / 22.5) % 16];
 }
