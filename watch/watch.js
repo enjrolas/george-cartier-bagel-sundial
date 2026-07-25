@@ -154,8 +154,11 @@ function beamAngle() {
 
 // ---------- tiny statue (three.js) ----------
 async function buildStatue() {
-  let THREE;
-  try { THREE = await import('three'); } catch (_) { return; }
+  let THREE, OBJLoader;
+  try {
+    THREE = await import('three');
+    ({ OBJLoader } = await import('three/addons/loaders/OBJLoader.js'));
+  } catch (_) { return; }
   const W = 200, H = 240;
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, W / H, 0.1, 100);
@@ -179,17 +182,12 @@ async function buildStatue() {
   dir.position.set(1.5, 2.5, 1.2);
   scene.add(dir);
 
-  // stylized monument: base, tall tapered column, a small crowning figure
   const g = new THREE.Group();
-  const stone = new THREE.MeshStandardMaterial({ color: 0xb9bcc2, roughness: 0.9, metalness: 0 });
-  const bronze = new THREE.MeshStandardMaterial({ color: 0xcaa24a, roughness: 0.5, metalness: 0.4 });
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 0.25, 8), stone); base.position.y = 0.125; g.add(base);
-  const col = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.16, 1.5, 12), stone); col.position.y = 1.0; g.add(col);
-  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.12, 12), stone); cap.position.y = 1.8; g.add(cap);
-  const figure = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 12), bronze); figure.position.y = 2.0; g.add(figure);
-  const wing = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.34, 4), bronze);
-  wing.position.set(0, 2.05, 0); wing.rotation.z = Math.PI; g.add(wing);
   scene.add(g);
+  new OBJLoader().load('../model/3DModel-lowpoly.obj',
+    (obj) => { fitStatue(THREE, obj, 1.95); g.add(obj); },
+    undefined,
+    () => { g.add(buildObelisk(THREE)); });   // fallback if the model can't load
 
   function frame() {
     g.rotation.y += 0.004; // gentle turntable so the little statue reads as 3D
@@ -238,6 +236,35 @@ function tickBar() {
     ? `Montréal shadow ${shadowBrg == null ? '—' : Math.round(shadowBrg) + '°'} · facing ${Math.round(heading)}°`
     : 'calibrating compass…';
   requestAnimationFrame(tickBar);
+}
+
+// scale/centre a loaded low-poly monument to `targetH` tall with its base at y=0,
+// and give it a flat-shaded, vertex-coloured material (colours are baked into the OBJ)
+function fitStatue(THREE, obj, targetH) {
+  obj.traverse((c) => {
+    if (!c.isMesh) return;
+    const hasColor = !!c.geometry.getAttribute('color');
+    c.material = new THREE.MeshStandardMaterial({
+      vertexColors: hasColor, color: hasColor ? 0xffffff : 0xb9bcc2,
+      roughness: 0.92, metalness: 0.04, flatShading: true,
+    });
+  });
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = new THREE.Vector3(); box.getSize(size);
+  const ctr = new THREE.Vector3(); box.getCenter(ctr);
+  const s = targetH / size.y;
+  obj.scale.setScalar(s);
+  obj.position.set(-ctr.x * s, -box.min.y * s, -ctr.z * s);
+}
+
+function buildObelisk(THREE) {
+  const g = new THREE.Group();
+  const stone = new THREE.MeshStandardMaterial({ color: 0xb9bcc2, roughness: 0.9 });
+  const col = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 1.7, 10), stone); col.position.y = 0.95; g.add(col);
+  const fig = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10),
+    new THREE.MeshStandardMaterial({ color: 0xcaa24a, metalness: 0.4, roughness: 0.5 }));
+  fig.position.y = 1.9; g.add(fig);
+  return g;
 }
 
 let toastTimer = null;

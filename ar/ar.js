@@ -232,11 +232,16 @@ async function checkXR() {
   } catch (_) {}
 }
 
+let statueProto = null; // low-poly monument, loaded once for the WebXR sundial
+
 async function enterXR() {
-  let THREE, sundial, reticle, hitSource = null, placed = false;
+  let THREE, OBJLoader, sundial, reticle, hitSource = null, placed = false;
   try {
     THREE = await import('three');
+    ({ OBJLoader } = await import('three/addons/loaders/OBJLoader.js'));
   } catch (_) { toast('Could not load 3D engine.'); return; }
+  new OBJLoader().load('../model/3DModel-lowpoly.obj',
+    (o) => { fitStatue(THREE, o, 0.6); statueProto = o; }, undefined, () => {});
 
   const canvas = document.createElement('canvas');
   const gl = canvas.getContext('webgl', { xrCompatible: true, alpha: true });
@@ -322,11 +327,15 @@ function buildSundial(THREE) {
     new THREE.RingGeometry(R - 0.03, R, 64).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
   ));
-  // gnomon
-  g.add(new THREE.Mesh(
-    new THREE.CylinderGeometry(0.02, 0.03, 0.5, 12).translate(0, 0.25, 0),
-    new THREE.MeshStandardMaterial({ color: 0xffb454 })
-  ));
+  // the monument (low-poly) stands at the centre as the gnomon
+  if (statueProto) {
+    g.add(statueProto.clone());
+  } else {
+    g.add(new THREE.Mesh(
+      new THREE.CylinderGeometry(0.02, 0.03, 0.5, 12).translate(0, 0.25, 0),
+      new THREE.MeshStandardMaterial({ color: 0xffb454 })
+    ));
+  }
   // bagel spokes: local dir East=+x, North=-z
   g.userData.spokes = [];
   bakeries.forEach((b) => {
@@ -347,6 +356,25 @@ function buildSundial(THREE) {
   );
   g.add(ray); g.userData.ray = ray;
   return g;
+}
+
+// scale/centre the loaded low-poly monument to `targetH` tall, base at y=0,
+// flat-shaded with its baked vertex colours
+function fitStatue(THREE, obj, targetH) {
+  obj.traverse((c) => {
+    if (!c.isMesh) return;
+    const hasColor = !!c.geometry.getAttribute('color');
+    c.material = new THREE.MeshStandardMaterial({
+      vertexColors: hasColor, color: hasColor ? 0xffffff : 0xb9bcc2,
+      roughness: 0.92, metalness: 0.04, flatShading: true,
+    });
+  });
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = new THREE.Vector3(); box.getSize(size);
+  const ctr = new THREE.Vector3(); box.getCenter(ctr);
+  const s = targetH / size.y;
+  obj.scale.setScalar(s);
+  obj.position.set(-ctr.x * s, -box.min.y * s, -ctr.z * s);
 }
 
 function updateSundial(THREE, g) {
