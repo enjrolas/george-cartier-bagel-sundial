@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>George Anywhere — Bagel Sundial</title>
+  <meta name="description" content="Stand at the Monument George-Étienne Cartier and see the bagel sundial in AR: bagel shops at their true bearings and the sun's shadow pointing at one of them." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- live camera feed (compass mode) -->
+  <video id="cam" playsinline muted></video>
+
+  <!-- compass HUD overlay -->
+  <div id="hud" class="hud" hidden>
+    <div class="horizon"></div>
+    <div class="crosshair"></div>
+    <div id="markers" class="markers"></div>
+    <div id="shadowCallout" class="shadow-callout" hidden>
+      <span class="sc-label">the shadow points to</span>
+      <span class="sc-name" id="scName">—</span>
+    </div>
+  </div>
+
+  <!-- WebXR dom-overlay root (used only during an XR session) -->
+  <div id="xrOverlay" class="xr-overlay" hidden>
+    <button id="xrExit" class="btn ghost" type="button">Exit AR</button>
+    <div id="xrHint" class="xr-hint">Point at the ground and tap to place the sundial</div>
+    <div id="xrInfo" class="xr-info"></div>
+  </div>
+
+  <!-- top bar -->
+  <header class="bar" id="bar" hidden>
+    <a class="back" href="/">‹ map</a>
+    <div class="bar-mid" id="barInfo">—</div>
+    <button class="btn small" id="enterAR" type="button" hidden>3D AR</button>
+  </header>
+
+  <!-- bottom info -->
+  <footer class="info" id="info" hidden>
+    <div class="info-row"><span id="clock">—</span><span id="sun">—</span></div>
+    <div class="info-target" id="infoTarget">—</div>
+  </footer>
+
+  <!-- start / permission screen -->
+  <div id="start" class="start">
+    <div class="start-card">
+      <div class="mark">◵</div>
+      <h1>George <span>Anywhere</span></h1>
+      <p>Hold your phone up toward the horizon, anywhere. You'll see Montréal's bagel shops floating at their true compass bearings from the Monument George-Étienne Cartier — and the monument's shadow pointing at one of them right now.</p>
+      <button id="startBtn" class="btn big" type="button">Start</button>
+      <p class="fine" id="startFine">Needs camera + motion access. Best outdoors.</p>
+      <a class="fine link" href="/">skip — open the 2D map instead</a>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="ar.js"></script>
+</body>
+</html>

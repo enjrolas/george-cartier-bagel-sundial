@@ -6,12 +6,20 @@ date/time it computes the sun's position, projects the shadow of the monument's
 **apex** to the ground, takes the vector **base-centre → shadow-tip**, and reports
 which **Montréal bagel bakery** that bearing points at (minimum angular deviation).
 
-Three endpoints share the same solar/geo math and the same shadow-bearing:
-- `/` — the interactive 3D map.
-- `/ar/` — WebAR: bagel shops + shadow pointer at their true compass bearings
-  (compass HUD on iOS/Android; optional WebXR 3D on ARCore).
+Four endpoints share the same solar/geo math and shadow-bearing:
+- `/` — the interactive 3D map (statue at true scale, milled-steel **dial**, and a
+  green **matrix-bagel triangle** along the shadow bearing).
+- `/ar/` — **WebXR** (ARCore/Android), **GPS-gated to the monument**: plant the
+  milled-steel dial on the real ground; a matrix-green triangle sweeps to a bagel.
+- `/anywhere/` — "George Anywhere": compass-HUD AR (iOS+Android) — bagel shops at
+  their true bearings from the monument + the shadow pointer, usable anywhere.
 - `/watch/` — MediaPipe wrist AR: a tiny statue on your wrist whose Montréal
   shadow points you to a bagel shop within 10 km of *you*, anywhere in the world.
+
+Shared pieces: `js/matrixtri.js` (the 2D matrix-bagel triangle used by the AR
+overlays); `model/3DModel-lowpoly.obj` (353 KB, AR) and `model/3DModel-main.obj`
+(942 KB, the `/` view) — both vertex-clustered from the scan with baked vertex
+colours (no texture). Regenerate with `scratchpad/decimate.py <DIV> <out>`.
 
 ## Layout
 - `index.html`, `css/style.css` — the 3D map page + dark "instrument panel" styling.

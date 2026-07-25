@@ -16,7 +16,7 @@ const els = {
   dateSlider: $('dateSlider'), dateVal: $('dateVal'),
   timeSlider: $('timeSlider'), timeVal: $('timeVal'),
   nowBtn: $('nowBtn'), tzLabel: $('tzLabel'),
-  roBearing: $('roBearing'), pointsTo: $('pointsTo'),
+  pointsTo: $('pointsTo'),
   note: $('viewerNote'), loader: $('loader'),
   viewCity: $('viewCity'), viewStatue: $('viewStatue'),
 };
@@ -92,13 +92,11 @@ function recompute() {
     els.note.textContent = altitude <= 0
       ? 'The sun is below the horizon — no shadow at this time.'
       : 'Sun on the horizon — shadow runs to infinity.';
-    els.roBearing.textContent = '—';
     setPointsTo(altitude <= 0 ? 'no shadow right now' : '—', false);
     viewer.setTarget(-1);
     return;
   }
   els.note.hidden = true;
-  els.roBearing.textContent = `${result.bearingDeg.toFixed(1)}° (${compass16(result.bearingDeg)})`;
   lastBearing = result.bearingDeg;
   matchBakery(result.bearingDeg);
 }
@@ -174,8 +172,4 @@ function splitCSVLine(line) {
   }
   out.push(cur);
   return out;
-}
-function compass16(deg) {
-  const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-  return dirs[Math.round(deg / 22.5) % 16];
 }

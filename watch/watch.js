@@ -5,6 +5,7 @@
 
 import { getSunPosition } from '../js/solar.js';
 import { bearingTo, angularDiff, haversine } from '../js/geo.js';
+import { createMatrixTriangle } from '../js/matrixtri.js';
 
 const DEG = Math.PI / 180;
 const MTL = { lat: 45.514204, lon: -73.585227 };     // the real monument
@@ -19,7 +20,8 @@ const els = {
   start: $('start'), startBtn: $('startBtn'), toast: $('toast'),
 };
 
-let heading = 0, headingOK = false;
+let heading = 0, headingOK = false, sHeading = null;
+let posTarget = null, sm = null;  // wrist anchor + its smoothed value
 let userPos = null;              // {lat, lon}
 let bagels = [];                 // {name, lat, lon, bearing, distKm}
 let shadowBrg = null;            // Montréal shadow bearing now
@@ -73,8 +75,10 @@ function onOrient(e) {
   if (typeof e.webkitCompassHeading === 'number' && !Number.isNaN(e.webkitCompassHeading)) h = e.webkitCompassHeading;
   else if (e.alpha != null && (e.absolute || e.type === 'deviceorientationabsolute')) h = 360 - e.alpha;
   if (h == null) return;
-  heading = (h + (screen.orientation ? screen.orientation.angle : 0) + 360) % 360;
-  headingOK = true;
+  h = (h + (screen.orientation ? screen.orientation.angle : 0) + 360) % 360;
+  if (sHeading == null) sHeading = h;
+  else { const d = ((h - sHeading + 540) % 360) - 180; sHeading = (sHeading + d * 0.18 + 360) % 360; }
+  heading = sHeading; headingOK = true;
 }
 async function requestOrientation() {
   const D = window.DeviceOrientationEvent;
@@ -122,18 +126,32 @@ async function loadBagels() {
 // ---------- wrist tracking ----------
 function onHands(results) {
   const lms = results.multiHandLandmarks;
-  if (!lms || !lms.length) { els.stage.hidden = true; els.findWrist.hidden = false; return; }
+  if (!lms || !lms.length) { els.stage.hidden = true; els.findWrist.hidden = false; posTarget = null; return; }
   els.stage.hidden = false; els.findWrist.hidden = true;
 
   const lm = lms[0];
-  const wrist = lm[0], mcp = lm[9];
-  const p = mapLandmark(wrist);
-  const q = mapLandmark(mcp);
-  const handPx = Math.hypot(p.x - q.x, p.y - q.y);
-  const scale = Math.max(0.5, Math.min(2.4, handPx / 70));
-  els.stage.style.transform =
-    `translate(${p.x}px, ${p.y}px) translate(-50%, -60%) scale(${scale})`;
+  const wrist = mapLandmark(lm[0]);
+  const mcp = mapLandmark(lm[9]);
+  const handPx = Math.hypot(wrist.x - mcp.x, wrist.y - mcp.y);
+  // anchor slightly down the forearm from the wrist joint, so it rides on top
+  // of the wrist like a watch rather than at the side
+  const dx = wrist.x - mcp.x, dy = wrist.y - mcp.y, len = Math.hypot(dx, dy) || 1;
+  posTarget = {
+    x: wrist.x + (dx / len) * handPx * 0.25,
+    y: wrist.y + (dy / len) * handPx * 0.25,
+    s: Math.max(0.5, Math.min(2.4, handPx / 70)),
+  };
+}
+
+// smooth the wrist anchor + heading every frame (MediaPipe/compass are jittery)
+function uiLoop() {
+  if (posTarget) {
+    if (!sm) sm = { ...posTarget };
+    else { const a = 0.22; sm.x += (posTarget.x - sm.x) * a; sm.y += (posTarget.y - sm.y) * a; sm.s += (posTarget.s - sm.s) * a; }
+    els.stage.style.transform = `translate(${sm.x}px, ${sm.y}px) translate(-50%, -82%) scale(${sm.s})`;
+  }
   if (beamEl) beamEl.style.transform = `translateX(-50%) rotate(${beamAngle()}deg)`;
+  requestAnimationFrame(uiLoop);
 }
 
 // map a normalized MediaPipe landmark to CSS pixels through object-fit: cover
@@ -169,12 +187,11 @@ async function buildStatue() {
   renderer.setSize(W, H);
   els.stage.appendChild(renderer.domElement);
 
-  // 2D shadow beam overlay (the pointer)
-  beamEl = document.createElement('div');
-  beamEl.style.cssText =
-    'position:absolute;left:50%;bottom:96px;width:10px;height:120px;transform-origin:bottom center;' +
-    'background:linear-gradient(180deg,rgba(255,180,84,0) 0%,rgba(255,180,84,.95) 100%);' +
-    'border-radius:6px;filter:drop-shadow(0 0 6px rgba(255,180,84,.7));pointer-events:none;';
+  // glowing matrix-bagel triangle pointer (same style as the / map)
+  beamEl = createMatrixTriangle(110, 200);
+  beamEl.style.position = 'absolute';
+  beamEl.style.left = '50%';
+  beamEl.style.bottom = '96px';    // apex rises from the statue's base (tune to taste)
   els.stage.appendChild(beamEl);
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.3));
@@ -190,8 +207,7 @@ async function buildStatue() {
     () => { g.add(buildObelisk(THREE)); });   // fallback if the model can't load
 
   function frame() {
-    g.rotation.y += 0.004; // gentle turntable so the little statue reads as 3D
-    renderer.render(scene, camera);
+    renderer.render(scene, camera); // statue stays upright and still
     requestAnimationFrame(frame);
   }
   frame();
@@ -214,6 +230,7 @@ async function startFlow() {
   els.findWrist.hidden = false;
 
   await buildStatue();
+  uiLoop();
   recompute();
   setInterval(recompute, 5000);
   tickBar();

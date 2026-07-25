@@ -141,16 +141,6 @@ html, body {
   font-size: 13px; color: var(--target); text-align: center;
 }
 
-/* ---------- blocking message ---------- */
-.msg {
-  position: fixed; inset: 0; z-index: 45;
-  display: flex; align-items: center; justify-content: center;
-  text-align: center; padding: 32px;
-  background: radial-gradient(900px 500px at 50% -10%, #16202c 0%, transparent 60%), #0a0d12;
-  font-size: 17px; line-height: 1.5; color: #c2ccd8;
-}
-.msg a { color: var(--accent-2); }
-
 /* ---------- toast ---------- */
 .toast {
   position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 88px);

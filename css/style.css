@@ -16,6 +16,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }   /* the hidden attribute must beat display:flex/grid */
 
 html, body {
   margin: 0;
