@@ -29,6 +29,8 @@ html, body {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 body {
@@ -44,8 +46,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px 16px;
+  flex-wrap: wrap;
 }
+.brand-text h1 { overflow-wrap: anywhere; }
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand-mark {
   font-size: 30px;
@@ -87,7 +91,17 @@ body {
   padding: 6px 14px;
   background: var(--panel);
 }
-@media (max-width: 560px) { .loc-readout { display: none; } }
+@media (max-width: 560px) {
+  .loc-readout { display: none; }
+  body { padding: 8px; gap: 8px; }
+  .brand-mark { font-size: 22px; }
+  .brand-text h1 { font-size: 14px; letter-spacing: 0; }
+  .ar-link { font-size: 10px; padding: 4px 9px; }
+  .topbar-right { gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .stage { min-height: 300px; }
+  .controls { padding: 10px 12px; gap: 8px; }
+  .ctl-group { flex-basis: 100%; }
+}
 
 /* ---------- stage (single 3D scene) ---------- */
 .stage {

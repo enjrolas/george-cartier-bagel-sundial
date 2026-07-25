@@ -13,11 +13,13 @@ import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 const DEG = Math.PI / 180;
 const TILE = 256;
 const STATUE_HEIGHT_M = 30.78;   // 101 ft
-const MAP_HALF_M = 24000;        // 48 km-wide city map plane
-const MAP_ZOOM = 11;             // OSM tile zoom for the wide map
-const LOCAL_HALF_M = 200;        // hi-res patch around the monument
-const LOCAL_ZOOM = 18;           // OSM tile zoom for the close-up (~0.4 m/px)
-const LOCAL_TRIGGER_M = 1500;    // build the hi-res patch when the camera gets this close
+const MAP_HALF_M = 24000;        // low-res city map — always on, covers every shop (~21 km max)
+const MAP_ZOOM = 11;             // ~53 m/px
+const MID_HALF_M = 5000;         // high-res ring within 5 km of the statue (statue view only)
+const MID_ZOOM = 14;             // ~6.7 m/px
+const LOCAL_HALF_M = 200;        // crisp patch right at the statue base (statue view only)
+const LOCAL_ZOOM = 18;           // ~0.4 m/px
+const STATUE_VIEW_M = 8000;      // treat the camera as "in statue view" within this distance
 
 export function createViewer(container, origin) {
   // --- Web-Mercator projection anchored at the monument ---
@@ -55,6 +57,21 @@ export function createViewer(container, origin) {
   controls.maxDistance = 150000;
   controls.update();
 
+  // Auto-fit the statue view to the viewport (both dimensions) so the whole
+  // statue + dial fit at any aspect. Turns off once the user takes control.
+  let autoFrame = true;
+  controls.addEventListener('start', () => { autoFrame = false; });
+  function frameStatue() {
+    const R = (baseRadius || 20) * 3.2;                 // scene radius (dial names extend ~3× the base)
+    const vHalf = (45 * DEG) / 2;
+    const hHalf = Math.atan(Math.tan(vHalf) * (camera.aspect || 1.6));
+    const dist = Math.max(R / Math.tan(vHalf), R / Math.tan(hHalf)) * 1.08;
+    const dir = new THREE.Vector3(45, 26, 70).normalize();
+    camera.position.copy(dir).multiplyScalar(dist).add(new THREE.Vector3(0, 14, 0));
+    controls.target.set(0, 14, 0);
+    controls.update();
+  }
+
   // --- lights ---
   scene.add(new THREE.AmbientLight(0xdfe7f0, 0.7));
   scene.add(new THREE.HemisphereLight(0xbcd0e6, 0x20242c, 0.5));
@@ -68,19 +85,26 @@ export function createViewer(container, origin) {
   scene.add(sun);
   scene.add(sun.target);
 
-  // reference grid — always visible, so the ground is never a single flat colour
+  // reference grid — a fallback under the map so the ground is never flat colour
   const grid = new THREE.GridHelper(MAP_HALF_M * 2, 48, 0x33414f, 0x222a34);
-  grid.position.y = 0.0;
+  grid.position.y = -0.5;
   scene.add(grid);
 
-  // wide city map, and a hi-res patch built lazily when the camera zooms in.
-  // Only one is ever visible (toggled by distance) so their tiles never z-fight.
-  const cityPlane = buildTilePlane(MAP_HALF_M, MAP_ZOOM, -0.1);
-  let localPlane = null, localBuilt = false;
-  function buildLocal() {
-    if (localBuilt) return;
-    localBuilt = true;
-    localPlane = buildTilePlane(LOCAL_HALF_M, LOCAL_ZOOM, 0.03);
+  // Low-res city map is ALWAYS on and covers every shop. In statue view we build
+  // higher-res tiers over it — a 5 km ring and a crisp patch at the base —
+  // pulled toward the camera with polygonOffset so they win without z-fighting.
+  const cityPlane = buildTilePlane(MAP_HALF_M, MAP_ZOOM, -0.4);
+  let midPlane = null, localPlane = null, hiResBuilt = false;
+  function buildHiRes() {
+    if (hiResBuilt) return;
+    hiResBuilt = true;
+    midPlane = buildTilePlane(MID_HALF_M, MID_ZOOM, -0.15);
+    localPlane = buildTilePlane(LOCAL_HALF_M, LOCAL_ZOOM, 0.0);
+    for (const [p, o] of [[midPlane, -2], [localPlane, -4]]) {
+      p.material.polygonOffset = true;
+      p.material.polygonOffsetFactor = o;
+      p.material.polygonOffsetUnits = o;
+    }
   }
 
   // shadow-catcher near the statue (keeps the map bright but shows the shadow)
@@ -97,13 +121,20 @@ export function createViewer(container, origin) {
   const POINTER_LEN = 60000;
   const POINTER_LOW = Math.tan(1 * DEG);    // bottom edge lifted 1° so it clears the ground
   const POINTER_HIGH = Math.tan(11 * DEG);  // top edge → 10° apex angle
+  // Tile the matrix texture at a fixed world scale so it isn't smeared over the
+  // 60 km triangle: RU repeats along the length, RV across the far edge, chosen so
+  // one texel ≈ the same size in both directions (isotropic).
+  const TILE_M = 200;
+  const RU = POINTER_LEN / (TILE_M * 2);
+  const RV = POINTER_LEN * (POINTER_HIGH - POINTER_LOW) / TILE_M;
   const triGeo = new THREE.BufferGeometry();
   triGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
-  triGeo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0, 0.5, 1, 0, 1, 1]), 2));
+  triGeo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0, RV / 2, RU, 0, RU, RV]), 2));
   triGeo.setIndex([0, 1, 2]);
   const mCanvas = document.createElement('canvas'); mCanvas.width = 512; mCanvas.height = 256;
   const mCtx = mCanvas.getContext('2d');
   const mTex = new THREE.CanvasTexture(mCanvas);
+  mTex.wrapS = mTex.wrapT = THREE.RepeatWrapping;
   const pointer = new THREE.Group();
   pointer.add(new THREE.Mesh(triGeo, new THREE.MeshBasicMaterial({
     color: 0x27ff86, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false })));
@@ -420,8 +451,8 @@ export function createViewer(container, origin) {
   }
 
   function zoomTo(where) {
-    if (where === 'statue') { camera.position.set(45, 40, 70); controls.target.set(0, 14, 0); buildLocal(); }
-    else { camera.position.set(0, 34000, 42000); controls.target.set(0, 0, 0); }
+    if (where === 'statue') { autoFrame = true; frameStatue(); buildHiRes(); }
+    else { autoFrame = false; camera.position.set(0, 34000, 42000); controls.target.set(0, 0, 0); }
     controls.update();
   }
 
@@ -474,18 +505,16 @@ export function createViewer(container, origin) {
       renderer.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      if (autoFrame) frameStatue();   // keep the whole scene fitted (initial load + rotate)
     }
     controls.update();
     if (pointer.visible) drawMatrix();
-    // pull in the hi-res patch once the camera is close, however the zoom happened
+    // low-res city map stays on (covers every shop); high-res tiers appear only
+    // in statue view, layered over it within 5 km / at the base
     const camDist = camera.position.distanceTo(controls.target);
-    if (!localBuilt && camDist < LOCAL_TRIGGER_M) buildLocal();
-    // show exactly one map plane so the two tile sets never overlap / flicker
-    if (localPlane) {
-      const close = camDist < LOCAL_HALF_M * 4;
-      localPlane.visible = close;
-      cityPlane.visible = !close;
-    }
+    const statueView = camDist < STATUE_VIEW_M;
+    if (statueView && !hiResBuilt) buildHiRes();
+    if (midPlane) { midPlane.visible = statueView; localPlane.visible = statueView; }
     renderer.render(scene, camera);
     requestAnimationFrame(tick);
   }
