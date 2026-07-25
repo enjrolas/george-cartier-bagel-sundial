@@ -145,7 +145,7 @@ export function createViewer(container, origin) {
   const modelGroup = new THREE.Group();
   scene.add(modelGroup);
   let baseCentroid = null, apexLocal = null, modelRoot = null, headingDeg = 0;
-  let dialShops = null, dial = null, baseRadius = 20;
+  let dialShops = null, dial = null, baseRadius = 20, dialItems = [];
 
   // Loads a single decimated OBJ with baked vertex colours (no MTL/texture).
   function loadModel(objPath) {
@@ -256,12 +256,10 @@ export function createViewer(container, origin) {
     });
     // dial shows the nearest 10 shops (map still shows all); each name is placed
     // at the shop's real bearing from the statue, so the shadow triangle sweeps to it
-    const withDist = list.map((b, i) => {
+    dialShops = list.map((b, i) => {
       const w = bakeryWorld[i];
-      return { name: b.name, bearing: (Math.atan2(w.x, -w.z) / DEG + 360) % 360, d: Math.hypot(w.x, w.z) };
+      return { idx: i, name: b.name, bearing: (Math.atan2(w.x, -w.z) / DEG + 360) % 360 };
     });
-    withDist.sort((a, b) => a.d - b.d);
-    dialShops = withDist.slice(0, 10);
     tryBuildDial();
   }
 
@@ -275,6 +273,22 @@ export function createViewer(container, origin) {
       const s = bakerySprites[idx];
       s.material.map = targetTex; s.scale.setScalar(0.05);
     }
+    setDialHighlight(idx);
+  }
+
+  // light up the selected shop's name + dot on the dial in bright green
+  function setDialHighlight(idx) {
+    for (const it of dialItems) {
+      const on = it.idx === idx;
+      if (it.on === on) continue;
+      it.on = on;
+      it.label.material.map.dispose();
+      it.label.material.map = makeTextTexture(it.name, on);
+      it.label.material.needsUpdate = true;
+      it.dot.material.map.dispose();
+      it.dot.material.map = makeGlyphTex(on);
+      it.dot.material.needsUpdate = true;
+    }
   }
 
   // --- dial: a raised 3D watch bezel (milled-steel ring) around the statue base,
@@ -282,8 +296,12 @@ export function createViewer(container, origin) {
   //     at that shop's true bearing so the shadow triangle sweeps straight to it ---
   function tryBuildDial() {
     if (dial || !dialShops || !modelRoot) return;
-    dial = buildDial(dialShops, baseRadius * 1.25);
-    scene.add(dial);
+    try {
+      dial = buildDial(dialShops, baseRadius * 1.25);
+      scene.add(dial);
+    } catch (e) {
+      console.error('dial build failed', e);   // never let a dial hiccup break model loading
+    }
   }
   function buildDial(shops, dialR) {
     const H = 1.6, innerR = baseRadius;     // low raised bezel with a flat top face
@@ -300,19 +318,40 @@ export function createViewer(container, origin) {
     );
     top.position.y = H; g.add(top);
 
-    // each name lies flat on the top face, at its shop's true bearing, top-toward-centre
-    const rText = (innerR + dialR) / 2, up = new THREE.Vector3(0, 1, 0);
-    for (const s of shops) {
-      const b = s.bearing * DEG;
-      const rOut = new THREE.Vector3(Math.sin(b), 0, -Math.cos(b)); // radial (unit)
-      const tang = new THREE.Vector3(Math.cos(b), 0, Math.sin(b));  // tangential (unit)
-      const label = makeNameLabel(s.name);
-      label.position.set(rOut.x * rText, H + 0.04, rOut.z * rText);
-      label.quaternion.setFromRotationMatrix(
-        new THREE.Matrix4().makeBasis(tang.clone().negate(), rOut.clone().negate(), up)
-      );
-      g.add(label);
-    }
+    // Each name sits at its shop's true bearing; a text dot marks the anchor and
+    // the name is staggered outward along the radius (all shops, so several tiers)
+    // so nothing overlaps. Refs are kept so the selected shop can glow green.
+    dialItems = [];
+    const rText = (innerR + dialR) / 2, y = H + 0.06, up = new THREE.Vector3(0, 1, 0);
+    const stemMat = new THREE.LineBasicMaterial({ color: 0x8a9099, transparent: true, opacity: 0.7 });
+    const ph = 5.2, pw = ph * 2, dd = 2.4;   // ~2× larger labels
+    const LANES = 6, RBASE = dialR * 1.04, RSTEP = ph * 1.15;   // radial gap > label height → no overlap
+    const sorted = shops.slice().sort((a, b) => a.bearing - b.bearing);
+    sorted.forEach((s, i) => {
+      try {
+        const b = s.bearing * DEG;
+        const ux = Math.sin(b), uz = -Math.cos(b);
+        const rOut = new THREE.Vector3(ux, 0, uz);
+        const tang = new THREE.Vector3(Math.cos(b), 0, Math.sin(b));
+        const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(tang, rOut, up));
+        const nameR = RBASE + (i % LANES) * RSTEP;
+
+        const dot = new THREE.Mesh(new THREE.PlaneGeometry(dd, dd),
+          new THREE.MeshBasicMaterial({ map: makeGlyphTex(false), transparent: true, depthWrite: false }));
+        dot.position.set(ux * rText, y, uz * rText); dot.quaternion.copy(q); g.add(dot);
+
+        g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(ux * rText, y, uz * rText), new THREE.Vector3(ux * nameR, y, uz * nameR)]), stemMat));
+
+        const label = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph),
+          new THREE.MeshBasicMaterial({ map: makeTextTexture(s.name, false), transparent: true, depthWrite: false }));
+        label.position.set(ux * nameR, y, uz * nameR); label.quaternion.copy(q); g.add(label);
+
+        dialItems.push({ idx: s.idx, name: s.name, label, dot, on: false });
+      } catch (e) {
+        console.error('dial label failed for', s && s.name, e);
+      }
+    });
     return g;
   }
 
@@ -334,7 +373,27 @@ export function createViewer(container, origin) {
     return tex;
   }
 
-  function makeNameLabel(name) {
+  // engraved "•" dot texture — dark normally, bright-green glow when selected
+  function makeGlyphTex(on) {
+    const s = 128;
+    const cnv = document.createElement('canvas'); cnv.width = cnv.height = s;
+    const x = cnv.getContext('2d');
+    x.font = `700 ${s}px "Cinzel", Georgia, serif`;
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    if (on) {
+      x.shadowColor = 'rgba(43,255,134,0.95)'; x.shadowBlur = 16;
+      x.fillStyle = '#39ff9c'; x.fillText('•', s / 2, s * 0.46);
+      x.shadowBlur = 0; x.fillStyle = '#eafff0'; x.fillText('•', s / 2, s * 0.46);
+    } else {
+      x.fillStyle = 'rgba(255,255,255,0.5)'; x.fillText('•', s / 2 + 1, s * 0.46 + 1);
+      x.fillStyle = '#111316'; x.fillText('•', s / 2, s * 0.46);
+    }
+    const tex = new THREE.CanvasTexture(cnv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+    return tex;
+  }
+
+  // carved-stone name texture — engraved normally, bright-green glow when selected
+  function makeTextTexture(name, on) {
     const cw = 512, ch = 256;
     const cnv = document.createElement('canvas'); cnv.width = cw; cnv.height = ch;
     const x = cnv.getContext('2d');
@@ -347,15 +406,17 @@ export function createViewer(container, origin) {
     const lh = fs * 1.02, tot = (lines.length - 1) * lh;
     lines.forEach((ln, li) => {
       const yy = ch / 2 + li * lh - tot / 2;
-      x.fillStyle = 'rgba(255,255,255,0.5)'; x.fillText(ln, cw / 2 + 1, yy + 1);
-      x.fillStyle = '#111316'; x.fillText(ln, cw / 2, yy);
+      if (on) {
+        x.shadowColor = 'rgba(43,255,134,0.95)'; x.shadowBlur = 22;
+        x.fillStyle = '#39ff9c'; x.fillText(ln, cw / 2, yy);
+        x.shadowBlur = 0; x.fillStyle = '#eafff0'; x.fillText(ln, cw / 2, yy);
+      } else {
+        x.fillStyle = 'rgba(255,255,255,0.5)'; x.fillText(ln, cw / 2 + 1, yy + 1);
+        x.fillStyle = '#111316'; x.fillText(ln, cw / 2, yy);
+      }
     });
     const tex = new THREE.CanvasTexture(cnv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-    const ph = 2.6, pw = ph * (cw / ch);   // metres; text reads along the tangential (pw) axis
-    return new THREE.Mesh(
-      new THREE.PlaneGeometry(pw, ph),
-      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
-    );
+    return tex;
   }
 
   function zoomTo(where) {

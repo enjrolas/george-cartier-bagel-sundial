@@ -229,6 +229,9 @@ async function startFlow() {
   els.info.hidden = false;
   els.findWrist.hidden = false;
 
+  // no motion data (desktop, etc.) → still runs, but warn it won't track
+  setTimeout(() => { if (!headingOK) { const d = document.getElementById('disclaimer'); if (d) d.hidden = false; } }, 1800);
+
   await buildStatue();
   uiLoop();
   recompute();

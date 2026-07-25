@@ -75,6 +75,14 @@ html, body {
 .start .link { display: inline-block; color: var(--accent-2); text-decoration: none; }
 .start .btn { margin-top: 18px; }
 
+.disclaimer {
+  position: fixed; z-index: 55;
+  left: 12px; right: 12px; top: calc(env(safe-area-inset-top) + 46px);
+  margin: 0 auto; max-width: 460px;
+  background: rgba(120, 26, 26, 0.9); border: 1px solid #e0736d;
+  color: #ffe2e0; border-radius: 10px; padding: 10px 14px;
+  font-size: 13px; text-align: center; line-height: 1.4;
+}
 .toast {
   position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 96px);
   transform: translateX(-50%); z-index: 60;

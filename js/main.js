@@ -111,7 +111,7 @@ function matchBakery(bearing) {
   });
   viewer.setTarget(best);
   if (best < 0) { setPointsTo('—', false); return; }
-  setPointsTo(`🥯 ${bakeries[best].name}`, true);
+  setPointsTo(bakeries[best].name, true);
 }
 
 // ---- controls ----
@@ -140,7 +140,7 @@ viewer.loadModel('model/3DModel-main.obj')
     console.error('Model load failed', err);
     els.loader.hidden = true;
     els.note.hidden = false;
-    els.note.textContent = 'Could not load the 3D model.';
+    els.note.textContent = `Could not load the 3D model: ${err && err.message ? err.message : err}`;
   });
 
 async function loadBakeries() {

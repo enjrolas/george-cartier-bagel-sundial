@@ -178,6 +178,9 @@ async function startFlow() {
   els.bar.hidden = false;
   els.info.hidden = false;
 
+  // no motion data (desktop, etc.) → still runs, but warn it won't track
+  setTimeout(() => { if (!headingOK) { const d = document.getElementById('disclaimer'); if (d) d.hidden = false; } }, 1800);
+
   camPromise.catch(() => toast('Camera unavailable — showing compass only.'));
   orientPromise.catch(() => {});
 
