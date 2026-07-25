@@ -1,0 +1,10 @@
+# Claude Code local config
+.claude/
+
+# editor / OS cruft
+*~
+*.swp
+.DS_Store
+
+# scratch
+*.tmp
