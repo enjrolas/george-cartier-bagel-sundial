@@ -122,11 +122,16 @@ els.timeSlider.addEventListener('input', () => {
   recompute();
 });
 els.nowBtn.addEventListener('click', () => { setNow(); recompute(); });
-els.viewCity.addEventListener('click', () => viewer.zoomTo('city'));
-els.viewStatue.addEventListener('click', () => viewer.zoomTo('statue'));
+function setActiveView(w) {
+  els.viewCity.classList.toggle('active', w === 'city');
+  els.viewStatue.classList.toggle('active', w === 'statue');
+}
+els.viewCity.addEventListener('click', () => { viewer.zoomTo('city'); setActiveView('city'); });
+els.viewStatue.addEventListener('click', () => { viewer.zoomTo('statue'); setActiveView('statue'); });
 
 // ---- boot ----
 setNow();
+setActiveView('statue');   // default view is the statue
 viewer.setHeading(HEADING);
 loadBakeries();
 viewer.loadModel('model/3DModel-main.obj')

@@ -145,7 +145,7 @@ export function createViewer(container, origin) {
   const modelGroup = new THREE.Group();
   scene.add(modelGroup);
   let baseCentroid = null, apexLocal = null, modelRoot = null, headingDeg = 0;
-  let bakeryNames = null, dial = null, baseRadius = 20;
+  let dialShops = null, dial = null, baseRadius = 20;
 
   // Loads a single decimated OBJ with baked vertex colours (no MTL/texture).
   function loadModel(objPath) {
@@ -254,10 +254,14 @@ export function createViewer(container, origin) {
       scene.add(s);
       bakerySprites.push(s);
     });
-    // dial shows only the nearest shops (top 10); the map still shows them all
-    const withDist = list.map((b, i) => ({ name: b.name, d: Math.hypot(bakeryWorld[i].x, bakeryWorld[i].z) }));
+    // dial shows the nearest 10 shops (map still shows all); each name is placed
+    // at the shop's real bearing from the statue, so the shadow triangle sweeps to it
+    const withDist = list.map((b, i) => {
+      const w = bakeryWorld[i];
+      return { name: b.name, bearing: (Math.atan2(w.x, -w.z) / DEG + 360) % 360, d: Math.hypot(w.x, w.z) };
+    });
     withDist.sort((a, b) => a.d - b.d);
-    bakeryNames = withDist.slice(0, 10).map((o) => o.name);
+    dialShops = withDist.slice(0, 10);
     tryBuildDial();
   }
 
@@ -273,63 +277,85 @@ export function createViewer(container, origin) {
     }
   }
 
-  // --- dial: a watch-bezel ring on the map, milled steel with black
-  //     powder-coated bagel-shop names, radius 25% larger than the statue base ---
+  // --- dial: a raised 3D watch bezel (milled-steel ring) around the statue base,
+  //     radius 25% larger than the base, with each carved-stone shop name placed
+  //     at that shop's true bearing so the shadow triangle sweeps straight to it ---
   function tryBuildDial() {
-    if (dial || !bakeryNames || !modelRoot) return;
-    dial = buildDial(bakeryNames, baseRadius * 1.25);
+    if (dial || !dialShops || !modelRoot) return;
+    dial = buildDial(dialShops, baseRadius * 1.25);
     scene.add(dial);
   }
-  function buildDial(names, dialR) {
-    const S = 1024, c = S / 2, rOut = S * 0.5, rIn = rOut * 0.8; // inner rim = statue base
-    const cnv = document.createElement('canvas'); cnv.width = cnv.height = S;
-    const x = cnv.getContext('2d');
-    // milled-steel band
-    x.save();
-    x.beginPath(); x.arc(c, c, rOut, 0, 7); x.arc(c, c, rIn, 0, 7, true); x.clip();
-    const grad = x.createRadialGradient(c, c, rIn, c, c, rOut);
-    grad.addColorStop(0, '#8b9199'); grad.addColorStop(0.5, '#c6ccd2');
-    grad.addColorStop(0.72, '#7e848c'); grad.addColorStop(1, '#b0b6bd');
-    x.fillStyle = grad; x.fillRect(0, 0, S, S);
-    for (let r = rIn; r < rOut; r += 2) { // turned/concentric milling
-      x.beginPath(); x.arc(c, c, r, 0, 7);
-      x.strokeStyle = (r & 2) ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.09)';
-      x.lineWidth = 1; x.stroke();
+  function buildDial(shops, dialR) {
+    const H = 1.6, innerR = baseRadius;     // low raised bezel with a flat top face
+    const g = new THREE.Group();
+    const steel = new THREE.MeshStandardMaterial({ color: 0xbcc2c9, metalness: 0.7, roughness: 0.38, side: THREE.DoubleSide });
+
+    const wallO = new THREE.Mesh(new THREE.CylinderGeometry(dialR, dialR, H, 96, 1, true), steel); wallO.position.y = H / 2; g.add(wallO);
+    const wallI = new THREE.Mesh(new THREE.CylinderGeometry(innerR, innerR, H, 96, 1, true), steel); wallI.position.y = H / 2; g.add(wallI);
+
+    // flat top face — the inscribable surface
+    const top = new THREE.Mesh(
+      new THREE.RingGeometry(innerR, dialR, 96).rotateX(-Math.PI / 2),
+      new THREE.MeshStandardMaterial({ map: makeSteelTexture(), metalness: 0.45, roughness: 0.5, side: THREE.DoubleSide })
+    );
+    top.position.y = H; g.add(top);
+
+    // each name lies flat on the top face, at its shop's true bearing, top-toward-centre
+    const rText = (innerR + dialR) / 2, up = new THREE.Vector3(0, 1, 0);
+    for (const s of shops) {
+      const b = s.bearing * DEG;
+      const rOut = new THREE.Vector3(Math.sin(b), 0, -Math.cos(b)); // radial (unit)
+      const tang = new THREE.Vector3(Math.cos(b), 0, Math.sin(b));  // tangential (unit)
+      const label = makeNameLabel(s.name);
+      label.position.set(rOut.x * rText, H + 0.04, rOut.z * rText);
+      label.quaternion.setFromRotationMatrix(
+        new THREE.Matrix4().makeBasis(tang.clone().negate(), rOut.clone().negate(), up)
+      );
+      g.add(label);
     }
-    x.restore();
-    x.strokeStyle = '#565c64'; x.lineWidth = 4; x.beginPath(); x.arc(c, c, rOut - 3, 0, 7); x.stroke();
-    x.strokeStyle = '#e9edf1'; x.lineWidth = 2; x.beginPath(); x.arc(c, c, rIn + 3, 0, 7); x.stroke();
-    // carved-stone names: Roman-inscription style (uppercase, U→V), engraved,
-    // and word-wrapped onto multiple lines so nothing overlaps
-    const rText = (rIn + rOut) / 2, n = names.length;
-    const fs = n <= 10 ? 26 : 18;
-    const lineH = fs * 1.02;
-    const maxW = (2 * Math.PI * rIn / n) * 0.86;  // tangential room at the inner rim
-    x.font = `700 ${fs}px "Trajan Pro", "Cinzel", "Times New Roman", Georgia, serif`;
+    return g;
+  }
+
+  function makeSteelTexture() {
+    const w = 128, h = 128;
+    const cnv = document.createElement('canvas'); cnv.width = w; cnv.height = h;
+    const x = cnv.getContext('2d');
+    const grad = x.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#aeb4bb'); grad.addColorStop(0.5, '#cdd3d9');
+    grad.addColorStop(0.52, '#7f858d'); grad.addColorStop(1, '#a7adb4');
+    x.fillStyle = grad; x.fillRect(0, 0, w, h);
+    for (let i = 0; i < w; i += 2) {        // vertical knurl
+      x.strokeStyle = (i & 2) ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.12)';
+      x.beginPath(); x.moveTo(i, 0); x.lineTo(i, h); x.stroke();
+    }
+    const tex = new THREE.CanvasTexture(cnv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.RepeatWrapping; tex.repeat.set(64, 1);
+    return tex;
+  }
+
+  function makeNameLabel(name) {
+    const cw = 512, ch = 256;
+    const cnv = document.createElement('canvas'); cnv.width = cw; cnv.height = ch;
+    const x = cnv.getContext('2d');
+    const label = name.toUpperCase().replace(/U/g, 'V');
+    const fs = 58;
+    x.font = `700 ${fs}px "Cinzel", "Trajan Pro", Georgia, serif`;
     try { x.letterSpacing = '2px'; } catch (_) {}
     x.textAlign = 'center'; x.textBaseline = 'middle';
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2 - Math.PI / 2;
-      const label = names[i].toUpperCase().replace(/U/g, 'V');
-      const lines = wrapToWidth(x, label, maxW).slice(0, 3);
-      x.save();
-      x.translate(c + Math.cos(a) * rText, c + Math.sin(a) * rText);
-      x.rotate(a + Math.PI / 2);
-      const total = (lines.length - 1) * lineH;
-      lines.forEach((ln, li) => {
-        const yy = li * lineH - total / 2;
-        x.fillStyle = 'rgba(255,255,255,0.5)'; x.fillText(ln, 0.8, yy + 1); // engraved highlight
-        x.fillStyle = '#111316'; x.fillText(ln, 0, yy);                     // dark incision
-      });
-      x.restore();
-    }
+    const lines = wrapToWidth(x, label, cw * 0.92).slice(0, 3);
+    const lh = fs * 1.02, tot = (lines.length - 1) * lh;
+    lines.forEach((ln, li) => {
+      const yy = ch / 2 + li * lh - tot / 2;
+      x.fillStyle = 'rgba(255,255,255,0.5)'; x.fillText(ln, cw / 2 + 1, yy + 1);
+      x.fillStyle = '#111316'; x.fillText(ln, cw / 2, yy);
+    });
     const tex = new THREE.CanvasTexture(cnv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-    const mesh = new THREE.Mesh(
-      new THREE.CircleGeometry(dialR, 96).rotateX(-Math.PI / 2),
+    const ph = 2.6, pw = ph * (cw / ch);   // metres; text reads along the tangential (pw) axis
+    return new THREE.Mesh(
+      new THREE.PlaneGeometry(pw, ph),
       new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
     );
-    mesh.position.y = 0.3;
-    return mesh;
   }
 
   function zoomTo(where) {
