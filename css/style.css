@@ -36,7 +36,9 @@ html, body {
 body {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;   /* fit the viewport (accounts for mobile browser chrome) */
+  overflow: hidden;
   padding: 14px;
   gap: 12px;
 }
@@ -91,6 +93,31 @@ body {
   padding: 6px 14px;
   background: var(--panel);
 }
+/* short viewports (phone landscape): put the sliders in a column beside the
+   viewport (stage 75% / controls 25%) so everything fits without scrolling */
+@media (max-height: 600px) {
+  body {
+    display: grid;
+    grid-template-columns: 3fr 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "bar bar" "stage controls";
+    height: 100vh; height: 100dvh;
+    overflow: hidden;
+    padding: 10px;
+    gap: 10px;
+  }
+  .topbar { grid-area: bar; }
+  .stage { grid-area: stage; min-height: 0; }
+  .controls {
+    grid-area: controls;
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    overflow-y: auto;
+  }
+  .controls .ctl-group { flex: 0 0 auto; flex-direction: column; align-items: stretch; }
+}
+
 @media (max-width: 560px) {
   .loc-readout { display: none; }
   body { padding: 8px; gap: 8px; }
@@ -107,7 +134,7 @@ body {
 .stage {
   position: relative;
   flex: 1 1 auto;
-  min-height: 440px;
+  min-height: 0;   /* shrink to fit; the 3D scene auto-refits to whatever height it gets */
   background: var(--panel);
   border: 1px solid var(--edge);
   border-radius: 14px;
